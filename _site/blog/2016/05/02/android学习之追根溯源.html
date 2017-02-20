@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>android学习之追根溯源</title>
+  <meta name="description" content="前几天在公司小组内做了一个android插件化的技术分享，然后被我们jerry大大追杀着要一篇分享，然后我就琢磨着怎么写，难道要把这么大一个主题用一篇文章写完？感觉不现实，况且本身我现在还在拜读人家的代码中，也没这个自信能把所有细节都理解透，解释清楚，所以再三考虑还是决定不误人子弟了……">
+
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="canonical" href="http://yourdomain.com/blog/2016/05/02/android%E5%AD%A6%E4%B9%A0%E4%B9%8B%E8%BF%BD%E6%A0%B9%E6%BA%AF%E6%BA%90.html">
+  <link rel="alternate" type="application/rss+xml" title="coder_yu's BLOG" href="http://yourdomain.com/feed.xml">
+</head>
+
+
+  <body>
+
+    <header class="site-header">
+
+  <div class="wrapper">
+
+    <a class="site-title" href="/">coder_yu's BLOG</a>
+
+    <nav class="site-nav">
+      <a href="#" class="menu-icon">
+        <svg viewBox="0 0 18 15">
+          <path fill="#424242" d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.031C17.335,0,18,0.665,18,1.484L18,1.484z"/>
+          <path fill="#424242" d="M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0c0-0.82,0.665-1.484,1.484-1.484 h15.031C17.335,6.031,18,6.696,18,7.516L18,7.516z"/>
+          <path fill="#424242" d="M18,13.516C18,14.335,17.335,15,16.516,15H1.484C0.665,15,0,14.335,0,13.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.031C17.335,12.031,18,12.696,18,13.516L18,13.516z"/>
+        </svg>
+      </a>
+
+      <div class="trigger">
+        
+          
+          <a class="page-link" href="/2016-06-06-welcome-to-jekyll.html">Welcome to Jekyll!</a>
+          
+        
+          
+          <a class="page-link" href="/about/">About</a>
+          
+        
+          
+        
+          
+        
+          
+        
+      </div>
+    </nav>
+
+  </div>
+
+</header>
+
+
+    <div class="page-content">
+      <div class="wrapper">
+        <article class="post" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title" itemprop="name headline">android学习之追根溯源</h1>
+    <p class="post-meta"><time datetime="2016-05-02T23:10:00+08:00" itemprop="datePublished">May 2, 2016</time></p>
+  </header>
+
+  <div class="post-content" itemprop="articleBody">
+    <p>前几天在公司小组内做了一个android插件化的技术分享，然后被我们jerry大大追杀着要一篇分享，然后我就琢磨着怎么写，难道要把这么大一个主题用一篇文章写完？感觉不现实，况且本身我现在还在拜读人家的代码中，也没这个自信能把所有细节都理解透，解释清楚，所以再三考虑还是决定不误人子弟了……</p>
+
+<p>不过为了做这个分享，我自己倒是学到了许多。因为要给别人分享，那肯定不能瞎扯啊，别人有疑问那肯定得解释到位啊，对于某些具体的细节不能全靠猜啊，咱得讲证据啊，所以呢，只能逼着自己去撸别人的代码，撸着撸着发现撸不动了，一些地方看不懂，看着好像是干嘛的，但又不确定。如果是平常，可能也就这么过去了，反正大致上能明白怎么回事，但这次为了分享，得讲得出个所以然，也就硬着头皮继续研究下去。这样，往往会学到其他新的知识，比如资源加载机制、应用程序和系统服务之间的交互模式、动态代理、activity的启动过程、广播注册细节等等，其实这些内容即使不知道，也是能漂亮的完成一个app的开发的，毕竟大部分时候我们用不上这些东西。但一直这么下去，也许你就一直仅限于做一些够用的app，而不是一些好用的产品，而且随便一个培训机构出来的小伙就能把你替换了，完全没有自己的竞争力。</p>
+
+<p>所以呢，说的现实点，为了自己的钱途，我觉得也不应该止步于表面。关于这一点，其实从程序员解决bug的方式就很容易看出来，比如说最常见的NullPointException，最简单快捷的解决办法就是给出错的代码加上非空判断，以前我就是这么做的，然后过几天另一个地方又出现空指针，那就再来一遍呗。就这样，还在为自己解决问题的能力和效率沾沾自喜。殊不知，也许只要把源头找到，这一系列问题就都不会再出现了，这才叫解决bug，才是有意义的代码，而不是无谓的加判断。当然，这个找源头的过程可能并不轻松，但也正是这样才能体现你的能力。</p>
+
+<p>这些也得感谢现在的老大，在不断的被追问导致这个bug的原因是什么的过程中，让我要成了追根溯源的习惯，而且，在找原因的过程经常会发现一些不知道的细节。所以，没事多问问自己为什么出错，并且找出那个罪恶之源！</p>
+
+  </div>
+
+</article>
+
+      </div>
+    </div>
+
+    <footer class="site-footer">
+
+  <div class="wrapper">
+
+    <h2 class="footer-heading">coder_yu's BLOG</h2>
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col footer-col-1">
+        <ul class="contact-list">
+          <li>coder_yu's BLOG</li>
+          <li><a href="mailto:coder_yul@126.com">coder_yul@126.com</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col footer-col-2">
+        <ul class="social-media-list">
+          
+          <li>
+            <a href="https://github.com/shuifengYu"><span class="icon icon--github"><svg viewBox="0 0 16 16"><path fill="#828282" d="M7.999,0.431c-4.285,0-7.76,3.474-7.76,7.761 c0,3.428,2.223,6.337,5.307,7.363c0.388,0.071,0.53-0.168,0.53-0.374c0-0.184-0.007-0.672-0.01-1.32 c-2.159,0.469-2.614-1.04-2.614-1.04c-0.353-0.896-0.862-1.135-0.862-1.135c-0.705-0.481,0.053-0.472,0.053-0.472 c0.779,0.055,1.189,0.8,1.189,0.8c0.692,1.186,1.816,0.843,2.258,0.645c0.071-0.502,0.271-0.843,0.493-1.037 C4.86,11.425,3.049,10.76,3.049,7.786c0-0.847,0.302-1.54,0.799-2.082C3.768,5.507,3.501,4.718,3.924,3.65 c0,0,0.652-0.209,2.134,0.796C6.677,4.273,7.34,4.187,8,4.184c0.659,0.003,1.323,0.089,1.943,0.261 c1.482-1.004,2.132-0.796,2.132-0.796c0.423,1.068,0.157,1.857,0.077,2.054c0.497,0.542,0.798,1.235,0.798,2.082 c0,2.981-1.814,3.637-3.543,3.829c0.279,0.24,0.527,0.713,0.527,1.437c0,1.037-0.01,1.874-0.01,2.129 c0,0.208,0.14,0.449,0.534,0.373c3.081-1.028,5.302-3.935,5.302-7.362C15.76,3.906,12.285,0.431,7.999,0.431z"/></svg>
+</span><span class="username">shuifengYu</span></a>
+
+          </li>
+          
+
+          
+        </ul>
+      </div>
+
+      <div class="footer-col footer-col-3">
+        <p>this is my first blog. Now I'm learning how to build it.</p>
+      </div>
+    </div>
+
+  </div>
+
+</footer>
+
+
+  </body>
+
+</html>

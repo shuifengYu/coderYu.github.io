@@ -5,8 +5,8 @@
     <description>this is my first blog. Now I&#39;m learning how to build it.</description>
     <link>http://yourdomain.com/</link>
     <atom:link href="http://yourdomain.com/feed.xml" rel="self" type="application/rss+xml"/>
-    <pubDate>Mon, 20 Feb 2017 23:00:08 +0800</pubDate>
-    <lastBuildDate>Mon, 20 Feb 2017 23:00:08 +0800</lastBuildDate>
+    <pubDate>Mon, 20 Feb 2017 23:05:44 +0800</pubDate>
+    <lastBuildDate>Mon, 20 Feb 2017 23:05:44 +0800</lastBuildDate>
     <generator>Jekyll v3.1.6</generator>
     
       <item>
@@ -1246,6 +1246,25 @@ DexClassLoader的创建过程我们已经看完了，看看它是如何去找到
         <pubDate>Mon, 06 Jun 2016 23:10:00 +0800</pubDate>
         <link>http://yourdomain.com/blog/2016/06/06/FirstBlog.html</link>
         <guid isPermaLink="true">http://yourdomain.com/blog/2016/06/06/FirstBlog.html</guid>
+        
+        
+        <category>Blog</category>
+        
+      </item>
+    
+      <item>
+        <title>android学习之追根溯源</title>
+        <description>&lt;p&gt;前几天在公司小组内做了一个android插件化的技术分享，然后被我们jerry大大追杀着要一篇分享，然后我就琢磨着怎么写，难道要把这么大一个主题用一篇文章写完？感觉不现实，况且本身我现在还在拜读人家的代码中，也没这个自信能把所有细节都理解透，解释清楚，所以再三考虑还是决定不误人子弟了……&lt;/p&gt;
+
+&lt;p&gt;不过为了做这个分享，我自己倒是学到了许多。因为要给别人分享，那肯定不能瞎扯啊，别人有疑问那肯定得解释到位啊，对于某些具体的细节不能全靠猜啊，咱得讲证据啊，所以呢，只能逼着自己去撸别人的代码，撸着撸着发现撸不动了，一些地方看不懂，看着好像是干嘛的，但又不确定。如果是平常，可能也就这么过去了，反正大致上能明白怎么回事，但这次为了分享，得讲得出个所以然，也就硬着头皮继续研究下去。这样，往往会学到其他新的知识，比如资源加载机制、应用程序和系统服务之间的交互模式、动态代理、activity的启动过程、广播注册细节等等，其实这些内容即使不知道，也是能漂亮的完成一个app的开发的，毕竟大部分时候我们用不上这些东西。但一直这么下去，也许你就一直仅限于做一些够用的app，而不是一些好用的产品，而且随便一个培训机构出来的小伙就能把你替换了，完全没有自己的竞争力。&lt;/p&gt;
+
+&lt;p&gt;所以呢，说的现实点，为了自己的钱途，我觉得也不应该止步于表面。关于这一点，其实从程序员解决bug的方式就很容易看出来，比如说最常见的NullPointException，最简单快捷的解决办法就是给出错的代码加上非空判断，以前我就是这么做的，然后过几天另一个地方又出现空指针，那就再来一遍呗。就这样，还在为自己解决问题的能力和效率沾沾自喜。殊不知，也许只要把源头找到，这一系列问题就都不会再出现了，这才叫解决bug，才是有意义的代码，而不是无谓的加判断。当然，这个找源头的过程可能并不轻松，但也正是这样才能体现你的能力。&lt;/p&gt;
+
+&lt;p&gt;这些也得感谢现在的老大，在不断的被追问导致这个bug的原因是什么的过程中，让我要成了追根溯源的习惯，而且，在找原因的过程经常会发现一些不知道的细节。所以，没事多问问自己为什么出错，并且找出那个罪恶之源！&lt;/p&gt;
+</description>
+        <pubDate>Mon, 02 May 2016 23:10:00 +0800</pubDate>
+        <link>http://yourdomain.com/blog/2016/05/02/android%E5%AD%A6%E4%B9%A0%E4%B9%8B%E8%BF%BD%E6%A0%B9%E6%BA%AF%E6%BA%90.html</link>
+        <guid isPermaLink="true">http://yourdomain.com/blog/2016/05/02/android%E5%AD%A6%E4%B9%A0%E4%B9%8B%E8%BF%BD%E6%A0%B9%E6%BA%AF%E6%BA%90.html</guid>
         
         
         <category>Blog</category>

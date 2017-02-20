@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>android类加载机制</title>
+  <meta name="description" content="最近在搞android插件化，其中最核心的一点就是如何让插件apk跑起来，其实就利用动态加载，将插件中的类加载到host中。之前也看过android类的加载机制，感觉对于整个过程大致看懂了，然后就开始整插件化，结果碰到问题了又感觉一知半解的，很是不爽，索性放一放插件化，先把android的类加载机制看个明白。这里...">
+
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="canonical" href="http://yourdomain.com/blog/2016/07/22/android%E7%B1%BB%E5%8A%A0%E8%BD%BD%E6%9C%BA%E5%88%B6%E5%89%AF%E6%9C%AC.html">
+  <link rel="alternate" type="application/rss+xml" title="coder_yu's BLOG" href="http://yourdomain.com/feed.xml">
+</head>
+
+
+  <body>
+
+    <header class="site-header">
+
+  <div class="wrapper">
+
+    <a class="site-title" href="/">coder_yu's BLOG</a>
+
+    <nav class="site-nav">
+      <a href="#" class="menu-icon">
+        <svg viewBox="0 0 18 15">
+          <path fill="#424242" d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.031C17.335,0,18,0.665,18,1.484L18,1.484z"/>
+          <path fill="#424242" d="M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0c0-0.82,0.665-1.484,1.484-1.484 h15.031C17.335,6.031,18,6.696,18,7.516L18,7.516z"/>
+          <path fill="#424242" d="M18,13.516C18,14.335,17.335,15,16.516,15H1.484C0.665,15,0,14.335,0,13.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.031C17.335,12.031,18,12.696,18,13.516L18,13.516z"/>
+        </svg>
+      </a>
+
+      <div class="trigger">
+        
+          
+          <a class="page-link" href="/2016-06-06-welcome-to-jekyll.html">Welcome to Jekyll!</a>
+          
+        
+          
+          <a class="page-link" href="/about/">About</a>
+          
+        
+          
+        
+          
+        
+          
+        
+      </div>
+    </nav>
+
+  </div>
+
+</header>
+
+
+    <div class="page-content">
+      <div class="wrapper">
+        <article class="post" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title" itemprop="name headline">android类加载机制</h1>
+    <p class="post-meta"><time datetime="2016-07-22T23:10:00+08:00" itemprop="datePublished">Jul 22, 2016</time></p>
+  </header>
+
+  <div class="post-content" itemprop="articleBody">
+    <p>最近在搞android插件化，其中最核心的一点就是如何让插件apk跑起来，其实就利用动态加载，将插件中的类加载到host中。之前也看过android类的加载机制，感觉对于整个过程大致看懂了，然后就开始整插件化，结果碰到问题了又感觉一知半解的，很是不爽，索性放一放插件化，先把android的类加载机制看个明白。这里给自己总结下，加深印象的同时保留笔记。</p>
+
+<p>首先需要知道的是android中两个主要的classloader，PathClassLoader和DexClassLoader，它们都继承自BaseDexClassLoader，这两个类有什么区别呢？其实看一下它们的源码注释就一目了然了。
+因为代码很少，约等于没有，这里直接贴出它们的源码，其实主要是注释：</p>
+
+<p><em>PathClassLoader</em></p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>package dalvik.system;
+/**
+ * Provides a simple {@link ClassLoader} implementation that operates on a list
+ * of files and directories in the local file system, but does not attempt to
+ * load classes from the network. Android uses this class for its system class
+ * loader and for its application class loader(s).
+ */
+public class PathClassLoader extends BaseDexClassLoader {
+    /**
+     * Creates a {@code PathClassLoader} that operates on a given list of files
+     * and directories. This method is equivalent to calling
+     * {@link #PathClassLoader(String, String, ClassLoader)} with a
+     * {@code null} value for the second argument (see description there).
+     *
+     * @param dexPath the list of jar/apk files containing classes and
+     * resources, delimited by {@code File.pathSeparator}, which
+     * defaults to {@code ":"} on Android
+     * @param parent the parent class loader
+     */
+    public PathClassLoader(String dexPath, ClassLoader parent) {
+        super(dexPath, null, null, parent);
+    }
+    /**
+     * Creates a {@code PathClassLoader} that operates on two given
+     * lists of files and directories. The entries of the first list
+     * should be one of the following:
+     *
+     * &lt;ul&gt;
+     * &lt;li&gt;JAR/ZIP/APK files, possibly containing a "classes.dex" file as
+     * well as arbitrary resources.
+     * &lt;li&gt;Raw ".dex" files (not inside a zip file).
+     * &lt;/ul&gt;
+     *
+     * The entries of the second list should be directories containing
+     * native library files.
+     *
+     * @param dexPath the list of jar/apk files containing classes and
+     * resources, delimited by {@code File.pathSeparator}, which
+     * defaults to {@code ":"} on Android
+     * @param libraryPath the list of directories containing native
+     * libraries, delimited by {@code File.pathSeparator}; may be
+     * {@code null}
+     * @param parent the parent class loader
+     */
+    public PathClassLoader(String dexPath, String libraryPath,
+            ClassLoader parent) {
+        super(dexPath, null, libraryPath, parent);
+    }
+}
+</code></pre>
+</div>
+<p>由注释看可以发现PathClassLoader被用来加载本地文件系统上的文件或目录，但不能从网络上加载，<strong>关键是它被用来加载系统类和我们的应用程序</strong>，这也是为什么它的两个构造函数中调用父类构造器的时候第二个参数传null，具体的参数意义请看接下来DexClassLoader的注释。</p>
+
+<p><em>DexClassLoader</em></p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>package dalvik.system;
+import java.io.File;
+/**
+ * A class loader that loads classes from {@code .jar} and {@code .apk} files
+ * containing a {@code classes.dex} entry. This can be used to execute code not
+ * installed as part of an application.
+ *
+ * &lt;p&gt;This class loader requires an application-private, writable directory to
+ * cache optimized classes. Use {@code Context.getDir(String, int)} to create
+ * such a directory: &lt;pre&gt;   {@code
+ *   File dexOutputDir = context.getDir("dex", 0);
+ * }&lt;/pre&gt;
+ *
+ * &lt;p&gt;&lt;strong&gt;Do not cache optimized classes on external storage.&lt;/strong&gt;
+ * External storage does not provide access controls necessary to protect your
+ * application from code injection attacks.
+ */
+public class DexClassLoader extends BaseDexClassLoader {
+    /**
+     * Creates a {@code DexClassLoader} that finds interpreted and native
+     * code.  Interpreted classes are found in a set of DEX files contained
+     * in Jar or APK files.
+     *
+     * &lt;p&gt;The path lists are separated using the character specified by the
+     * {@code path.separator} system property, which defaults to {@code :}.
+     *
+     * @param dexPath the list of jar/apk files containing classes and
+     *     resources, delimited by {@code File.pathSeparator}, which
+     *     defaults to {@code ":"} on Android
+     * @param optimizedDirectory directory where optimized dex files
+     *     should be written; must not be {@code null}
+     * @param libraryPath the list of directories containing native
+     *     libraries, delimited by {@code File.pathSeparator}; may be
+     *     {@code null}
+     * @param parent the parent class loader
+     */
+    public DexClassLoader(String dexPath, String optimizedDirectory,
+            String libraryPath, ClassLoader parent) {
+        super(dexPath, new File(optimizedDirectory), libraryPath, parent);
+    }
+}
+</code></pre>
+</div>
+<p>DexClassLoader用来加载jar、apk，其实还包括zip文件或者直接加载dex文件，它可以被用来执行未安装的代码或者未被应用加载过的代码。这里也写出了它需要的四个参数的意思</p>
+
+<ol>
+  <li>dexPath:需要被加载的文件地址，可以多个，用File.pathSeparator分割</li>
+  <li>optimizedDirectory:dex文件被加载后会被编译器优化，优化之后的dex存放路径，<strong>不可以为null</strong>。注意，注释中也提到需要一个应用私有的可写的一个路径，以防止应用被注入攻击，并且给出了例子      File dexOutputDir = context.getDir(“dex”, 0);</li>
+  <li>libraryPath：包含libraries的目录列表，plugin中有so文件，需要将so拷贝到sd卡上，然后把so所在的目录当参数传入，同样用File.pathSeparator分割，如果没有则传null就行了,会自动加上系统so库的存放目录</li>
+  <li>parent：父类构造器</li>
+</ol>
+
+<p>这里着重看一下第二个参数，之前说过PathClassLoader中调用父类构造器的时候这个参数穿了null，因为加载app应用的时候我们的apk已经被安装到本地文件系统上了，其内部的dex已经被提取并且执行过优化了，优化之后放在系统目录/data/dalvik-cache下。</p>
+
+<h4 id="section">接下来我们看一下类的具体加载过程</h4>
+<p>首先看一段如何使用类加载器加载的调用代码：</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>	try {
+            File file = view.getActivity().getDir("dex",0);
+            String optimizedDirectory = file.getAbsolutePath();
+            DexClassLoader loader = new DexClassLoader("需要被加载的dex文件所在的路径",optimizedDirectory,null,context.getClassLoader());
+            loader.loadClass("需要加载的类的完全限定名");
+        } catch (ClassNotFoundException e) {
+            e.printStackTrace();
+        }
+</code></pre>
+</div>
+<p>这里我们就用了自定义了一个DexClassLoaderLoader，并且调用了它的loadClass方法，这样一个需要被使用的类就被我们加载进来了，接下去就可以正常使用这个类了，具体怎么使用我就不多说了，我们还是来研究研究这个类是怎么被加载进来的吧~</p>
+
+<p>可以看到new DexClassLoader的时候我们用了4个参数，参数意义上面已经讲过了，从上面的源码中可以看到DexClassLoader的构造器中直接调用了父类的构造器，只是将optimizedDirectory路径封装成一个File，具体这些参数是如何被使用的呢，我们往下看。</p>
+
+<p><code class="highlighter-rouge">BaseDexClassLoader类的构造器</code></p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>	/**
+     * Constructs an instance.
+     *
+     * @param dexPath the list of jar/apk files containing classes and
+     * resources, delimited by {@code File.pathSeparator}, which
+     * defaults to {@code ":"} on Android
+     * @param optimizedDirectory directory where optimized dex files
+     * should be written; may be {@code null}
+     * @param libraryPath the list of directories containing native
+     * libraries, delimited by {@code File.pathSeparator}; may be
+     * {@code null}
+     * @param parent the parent class loader
+     */
+  public BaseDexClassLoader(String dexPath, File optimizedDirectory,
+            String libraryPath, ClassLoader parent) {
+        super(parent);
+        this.originalPath = dexPath;
+        this.pathList =
+            new DexPathList(this, dexPath, libraryPath, optimizedDirectory);
+    }
+</code></pre>
+</div>
+<p>首先也是调用了父类的构造器，但这里只将parent传给父类，即ClassLoader，ClassLoader中做的也很很简单，它内部有个parent属性，正好保存传进来的参数parent,这里可以稍微看一下第三个参数的注释，最后一句说到可以为null，而是否为null又刚好是PathClassLoader和DexClassLoader的区别，那是否为null最终又意味着什么呢？卖个关子先~</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>	protected ClassLoader(ClassLoader parentLoader) {
+        this(parentLoader, false);
+    }
+
+    ClassLoader(ClassLoader parentLoader, boolean nullAllowed) {
+        if (parentLoader == null &amp;&amp; !nullAllowed) {
+            throw new NullPointerException("parentLoader == null &amp;&amp; !nullAllowed");
+        }
+        parent = parentLoader;
+    }
+
+</code></pre>
+</div>
+<p>接下去BaseDexClassLoader给originalPath 和 pathList赋了值，originalPath就是我们传进入的dex文件路径，pathList 是一个new 出来的DexPathList对象，这个DexPathList又是何方神圣？且听慢慢道来。</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code> /**
+     * Constructs an instance.
+     *
+     * @param definingContext the context in which any as-yet unresolved
+     * classes should be defined
+     * @param dexPath list of dex/resource path elements, separated by
+     * {@code File.pathSeparator}
+     * @param libraryPath list of native library directory path elements,
+     * separated by {@code File.pathSeparator}
+     * @param optimizedDirectory directory where optimized {@code .dex} files
+     * should be found and written to, or {@code null} to use the default
+     * system directory for same
+     */
+    public DexPathList(ClassLoader definingContext, String dexPath,
+            String libraryPath, File optimizedDirectory) {
+        if (definingContext == null) {
+            throw new NullPointerException("definingContext == null");
+        }
+        if (dexPath == null) {
+            throw new NullPointerException("dexPath == null");
+        }
+        if (optimizedDirectory != null) {
+            if (!optimizedDirectory.exists())  {
+                throw new IllegalArgumentException(
+                        "optimizedDirectory doesn't exist: "
+                        + optimizedDirectory);
+            }
+            if (!(optimizedDirectory.canRead()
+                            &amp;&amp; optimizedDirectory.canWrite())) {
+                throw new IllegalArgumentException(
+                        "optimizedDirectory not readable/writable: "
+                        + optimizedDirectory);
+            }
+        }
+        this.definingContext = definingContext;
+        this.dexElements =
+            makeDexElements(splitDexPath(dexPath), optimizedDirectory);
+        this.nativeLibraryDirectories = splitLibraryPath(libraryPath);
+    }
+
+</code></pre>
+</div>
+<p>别的先不说，先看注释。第四个参数中说到如果optimizedDirectory 为null则使用系统默认路径代替，这个默认路径也就是/data/dalvik-cache/目录，这个一般情况下是没有权限去访问的，所以这也就解释了为什么我们只能用DexClassLoader去加载类而不用PathClassLoader。</p>
+
+<p>然后接着看代码，显然，前面三个if判断都是用来验证参数的合法性的，之后同样只是做了三个赋值操作，第一个就不说了，保存了实例化DexPathList的classloader，第二个参数的声明是一个Element数组,第三个参数是lib库的目录文件数组，</p>
+
+<p>```
+ private final Element[] dexElements;
+ private final File[] nativeLibraryDirectories;</p>
+
+<p>```</p>
+
+<p>看它们之前先看看几个split小函数：</p>
+
+ 	private static ArrayList<File> splitDexPath(String path) {
+</File><div class="highlighter-rouge"><pre class="highlight"><code>    return splitPaths(path, null, false);
+}
+
+private static File[] splitLibraryPath(String path) {
+    ArrayList&lt;File&gt; result = splitPaths(
+            path, System.getProperty("java.library.path", "."), true);
+    return result.toArray(new File[result.size()]);
+} 
+</code></pre>
+</div>
+
+<p>这两个顾名思义就是拿来分割dexPath和libPath，它们内部都调用了splitPaths方法，只是三个参数不一样，其中splitLibraryPath方法中调用splitPaths时的第二个参数仿佛又透露了什么信息，没错，之前介绍DexClassLoader参数中的libraryPath的时候说过，会加上系统so库的存放目录，就是在这个时候添加上去的。</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code> 	private static ArrayList&lt;File&gt; splitPaths(String path1, String path2,
+            boolean wantDirectories) {
+        ArrayList&lt;File&gt; result = new ArrayList&lt;File&gt;();
+        splitAndAdd(path1, wantDirectories, result);
+        splitAndAdd(path2, wantDirectories, result);
+        return result;
+    }
+</code></pre>
+</div>
+<p>什么啊，原来这个方法也没做什么事啊，只是把参数path1和参数path2又分别调用了下splitAndAdd方法，但是这里创建了一个ArrayList,而且调用splitAndAdd方法的时候都当参数传入了，并且最终返回了这个list，所以我们大胆猜测下，path1和path2最后被分割后的值都存放在了list中返回,看下是不是这么一回事吧：</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>	private static void splitAndAdd(String path, boolean wantDirectories,
+            ArrayList&lt;File&gt; resultList) {
+        if (path == null) {
+            return;
+        }
+        String[] strings = path.split(Pattern.quote(File.pathSeparator));
+        for (String s : strings) {
+            File file = new File(s);
+            if (! (file.exists() &amp;&amp; file.canRead())) {
+                continue;
+            }
+            /*
+             * Note: There are other entities in filesystems than
+             * regular files and directories.
+             */
+            if (wantDirectories) {
+                if (!file.isDirectory()) {
+                    continue;
+                }
+            } else {
+                if (!file.isFile()) {
+                    continue;
+                }
+            }
+            resultList.add(file);
+        }
+    }
+ ```
+ 果然，跟我们猜的一样，只是又加上了文件是否存在以及是否可读的验证，然后根据参数wantDirectories判断是否文件类型是被需要的类型，最终加入list。现在我们回过头去看看splitDexPath方法和splitLibraryPath方法，是不是一目了然了。
+ 
+ 再往上看DexPathList的构造器，nativeLibraryDirectories的最终值也已经知道了，就差dexElements了，makeDexElements方法的两个参数我们也已经知道了，那我们就看看makeDexElements都干了些什么吧。
+ 
+ ```
+  	private static Element[] makeDexElements(ArrayList&lt;File&gt; files,
+            File optimizedDirectory) {
+        ArrayList&lt;Element&gt; elements = new ArrayList&lt;Element&gt;();
+        /*
+         * Open all files and load the (direct or contained) dex files
+         * up front.
+         */
+        for (File file : files) {
+            ZipFile zip = null;
+            DexFile dex = null;
+            String name = file.getName();
+            if (name.endsWith(DEX_SUFFIX)) {
+                // Raw dex file (not inside a zip/jar).
+                try {
+                    dex = loadDexFile(file, optimizedDirectory);
+                } catch (IOException ex) {
+                    System.logE("Unable to load dex file: " + file, ex);
+                }
+            } else if (name.endsWith(APK_SUFFIX) || name.endsWith(JAR_SUFFIX)
+                    || name.endsWith(ZIP_SUFFIX)) {
+                try {
+                    zip = new ZipFile(file);
+                } catch (IOException ex) {
+                    /*
+                     * Note: ZipException (a subclass of IOException)
+                     * might get thrown by the ZipFile constructor
+                     * (e.g. if the file isn't actually a zip/jar
+                     * file).
+                     */
+                    System.logE("Unable to open zip file: " + file, ex);
+                }
+                try {
+                    dex = loadDexFile(file, optimizedDirectory);
+                } catch (IOException ignored) {
+                    /*
+                     * IOException might get thrown "legitimately" by
+                     * the DexFile constructor if the zip file turns
+                     * out to be resource-only (that is, no
+                     * classes.dex file in it). Safe to just ignore
+                     * the exception here, and let dex == null.
+                     */
+                }
+            } else {
+                System.logW("Unknown file type for: " + file);
+            }
+            if ((zip != null) || (dex != null)) {
+                elements.add(new Element(file, zip, dex));
+            }
+        }
+        return elements.toArray(new Element[elements.size()]);
+    }
+ ```
+ 方法也不长，我们一段段看下去。首先创建了一个elememt 列表，然后遍历由dexpath分割得来的文件列表，其实一般使用场景下也就一个文件。循环里面针对每个file 声明一个zipfile和一个dexfile，判断file的文件后缀名，如果是".dex"则使用loadDexFile方法给dex赋值，如果是“.apk”,“.jar”,“.zip”文件的则把file包装成zipfile赋值给zip，然后同样是用loadDexFile方法给dex赋值，如果是其他情况则不做处理，打印日志说明文件类型不支持，而且下一个if判断中由于zip和dex都未曾赋值，所以也不会添加到elements列表中去。注意下：这里所谓的文件类型仅仅是指文件的后缀名而已，并不是文件的实际类型，比如我们将.zip文件后缀改成.txt，那么就不支持这个文件了。而且我们可以看到对于dexpath目前只支持“.dex”、“.jar”、“.apk”、“.zip”这四种类型。
+ 
+ 现在还剩下两个东西可能还不太明确，一个是什么是DexFile以及这里的loadDexFile方法是如何创建dexfile实例的，另一个是什么是Elememt，看了下Element源码，哈哈，so easy，就是一个简单的数据结构体加一个方法，所以我们就先简单把它当做一个存储了file，zip，dex三个字段的一个实体类。那么就剩下DexFile了。
+ 
+ 
+ ```
+ 	private static DexFile loadDexFile(File file, File optimizedDirectory)
+            throws IOException {
+        if (optimizedDirectory == null) {
+            return new DexFile(file);
+        } else {
+            String optimizedPath = optimizedPathFor(file, optimizedDirectory);
+            return DexFile.loadDex(file.getPath(), optimizedPath, 0);
+        }
+    }
+    
+    
+ ```
+ 很简洁，如果optimizedDirectory == null则直接new 一个DexFile，否则就使用DexFile.loadDex来创建一个DexFile实例。
+ 
+ ```
+ /**
+     * Converts a dex/jar file path and an output directory to an
+     * output file path for an associated optimized dex file.
+     */
+    private static String optimizedPathFor(File path,
+            File optimizedDirectory) {
+        /*
+         * Get the filename component of the path, and replace the
+         * suffix with ".dex" if that's not already the suffix.
+         *
+         * We don't want to use ".odex", because the build system uses
+         * that for files that are paired with resource-only jar
+         * files. If the VM can assume that there's no classes.dex in
+         * the matching jar, it doesn't need to open the jar to check
+         * for updated dependencies, providing a slight performance
+         * boost at startup. The use of ".dex" here matches the use on
+         * files in /data/dalvik-cache.
+         */
+        String fileName = path.getName();
+        if (!fileName.endsWith(DEX_SUFFIX)) {
+            int lastDot = fileName.lastIndexOf(".");
+            if (lastDot &lt; 0) {
+                fileName += DEX_SUFFIX;
+            } else {
+                StringBuilder sb = new StringBuilder(lastDot + 4);
+                sb.append(fileName, 0, lastDot);
+                sb.append(DEX_SUFFIX);
+                fileName = sb.toString();
+            }
+        }
+        File result = new File(optimizedDirectory, fileName);
+        return result.getPath();
+    }
+ ```
+ 这个方法获取被加载的dexpath的文件名，如果不是“.dex”结尾的就改成“.dex”结尾，然后用optimizedDirectory和新的文件名构造一个File并返回该File的路径，所以DexFile.loadDex方法的第二个参数其实是dexpath文件对应的优化文件的输出路径。比如我要加载一个dexpath为“sdcard/coder_yu/plugin.apk”，optimizedDirectory 为使用范例中的目录的话，那么最终优化后的输出路径为/data/user/0/com.coder_yu.test/app_dex/plugin.dex,具体的目录在不同机型不同rom下有可能会不一样。
+ 
+是时候看看DexFile了。在上面的loadDexFile方法中我们看到optimizedDirectory参数为null的时候直接返回new DexFile（file）了，否则返回 DexFile.loadDex(file.getPath(), optimizedPath, 0)，但其实他们最终都是使用了相同方法去加载dexpath文件，因为DexFile.loadDex方法内部也是直接调用的了DexFile的构造器，以下：
+ 
+ ```
+ 	static public DexFile loadDex(String sourcePathName, String outputPathName,
+        int flags) throws IOException {
+        return new DexFile(sourcePathName, outputPathName, flags);
+    }
+ ```
+ 然后看看DexFile的构造器吧
+ 
+ ```
+ 
+ 	public DexFile(File file) throws IOException {
+        this(file.getPath());
+    }
+    /**
+     * Opens a DEX file from a given filename. This will usually be a ZIP/JAR
+     * file with a "classes.dex" inside.
+     *
+     * The VM will generate the name of the corresponding file in
+     * /data/dalvik-cache and open it, possibly creating or updating
+     * it first if system permissions allow.  Don't pass in the name of
+     * a file in /data/dalvik-cache, as the named file is expected to be
+     * in its original (pre-dexopt) state.
+     *
+     * @param fileName
+     *            the filename of the DEX file
+     *
+     * @throws IOException
+     *             if an I/O error occurs, such as the file not being found or
+     *             access rights missing for opening it
+     */
+    public DexFile(String fileName) throws IOException {
+        mCookie = openDexFile(fileName, null, 0);
+        mFileName = fileName;
+        guard.open("close");
+        //System.out.println("DEX FILE cookie is " + mCookie);
+    }
+    
+    private DexFile(String sourceName, String outputName, int flags) throws IOException {
+        mCookie = openDexFile(sourceName, outputName, flags);
+        mFileName = sourceName;
+        guard.open("close");
+        //System.out.println("DEX FILE cookie is " + mCookie);
+    }
+ ```
+ 可以看到直接new DexFile（file）和DexFile.loadDex(file.getPath(), optimizedPath, 0)最终都是调用了openDexFile（sourceName， outputName, flags)方法，只是直接new的方式optimizedPath参数为null，这样openDexFile方法会默认使用 /data/dalvik-cache目录作为优化后的输出目录，第二个构造器的注释中写的很明白了。mCookie是一个int值，保存了openDexFile方法的返回值，openDexFile方法是一个native方法，我们就不深入了，我自己也就看了个大概，有兴趣的同学可以看下这篇文章:
+ &lt;http://blog.csdn.net/zhoushishang/article/details/38703623&gt;
+ 这样总算是创建了一个DexClassLoader。
+ 
+##### 我们回顾一下:从new DexClassLoader(dexPath,optimizedDirectory,libraryPath,parentLoader)开始,调用父类BaseDexClassLoader构造器，用originalPath 保存了 dexPath，pathList保存了一个由dexPath、optimizedDirectory、libraryPath、loader四个参数构建的DexPathList，DexPathList中的definingContext 保存了parentLoader，optimizedDirectory和libraryPath会被分割成数组，其中nativeLibraryDirectories保存了libraryPath被分割后的数组，并且加上了系统so库的目录，dexElements保存了由dexPath被分割后的对应的file而创建的Elememt，它只是一个简单实体类，由一个File，一个ZipFile，一个DexFile组成，ZipFile是由jar、zip、apk形式的file包装成而来，DexFile使用native方法openDexFile打开了具体的file并输出到优化路径。
+![image](classloader 关系图.jpg)
+
+---
+DexClassLoader的创建过程我们已经看完了，看看它是如何去找到我们需要的类的吧！
+
+先把使用范例再贴一遍
+
+</code></pre>
+</div>
+<div class="highlighter-rouge"><pre class="highlight"><code>try {
+        File file = view.getActivity().getDir("dex",0);
+        String optimizedDirectory = file.getAbsolutePath();
+        DexClassLoader loader = new DexClassLoader("需要被加载的dex文件所在的路径",optimizedDirectory,null,context.getClassLoader());
+        loader.loadClass("需要加载的类的完全限定名");
+    } catch (ClassNotFoundException e) {
+        e.printStackTrace();
+    } ``` 我们已经拿到loader了，然后就是loader.loadClass("需要加载的类的完全限定名")，我们假设需要被加载的类为 'com.coder_yu.plugin.Test',也即是loader.loadClass("com.coder_yu.plugin.Test"),所以我们先去DexClassLoader中看看loaderClass方法，不过好像没有这个方法，那就去它的父类BaseDexClassLoader中看看，还是 没有，那就再往上走，去ClassLoader类里面找，总算找到了：
+
+ public Class&lt;?&gt; loadClass(String className) throws ClassNotFoundException {
+    return loadClass(className, false);
+}
+</code></pre>
+</div>
+
+<p>直接调用另一个loadclass方法，看一下：</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code> 	protected Class&lt;?&gt; loadClass(String className, boolean resolve) throws ClassNotFoundException {
+        Class&lt;?&gt; clazz = findLoadedClass(className);
+
+        if (clazz == null) {
+            ClassNotFoundException suppressed = null;
+            try {
+                clazz = parent.loadClass(className, false);
+            } catch (ClassNotFoundException e) {
+                suppressed = e;
+            }
+
+            if (clazz == null) {
+                try {
+                    clazz = findClass(className);
+                } catch (ClassNotFoundException e) {
+                    e.addSuppressed(suppressed);
+                    throw e;
+                }
+            }
+        }
+
+        return clazz;
+    }
+</code></pre>
+</div>
+<p>直接调用findLoadedClass方法，这个方法会去虚拟机中找当前classloader是否已经加载过该class了，如果加载过了则直接返回这个class，否则返回null，并去调用parent的loadClass方法，依次类推，会一直找到根classloader的findLoadedClass方法，因为我们这里是第一次去加载sd卡上的自定义插件，所以肯定没被加载过，那么直到根classloader.findLoadedClass将一直返回null，然后会去调 findClass(className)方法，我们先看一下findLoadedClass方法吧：</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code> protected final Class&lt;?&gt; findLoadedClass(String className) {
+        ClassLoader loader;
+        if (this == BootClassLoader.getInstance())
+            loader = null;
+        else
+            loader = this;
+        return VMClassLoader.findLoadedClass(loader, className);
+    }
+</code></pre>
+</div>
+<p>BootClassLoader是ClassLoader的默认parentloader，所以它是加载器链中的顶端，也就是classloader的根节点，因此它会最终代理一些方法到虚拟机去执行，感兴趣的同学可以去看下ClassLoader的源码。这里说一下，其实根节点我们刚才说了是BootClassLoader，而且它重写了loadClass方法，因为它没有parentloader，所以它没有再去调用parent.loadClass(className, false)，而是直接调用findClass方法，而findClass方法中也是直接返回Class.classForName(name, false, null)得到的值，显然结果是null。</p>
+
+<p>我们构造DexClassLoader的时候给的parentloader参数是context.getClassLoader()，它其实就是加载我们应用的类加载器，也就是PathClassLoader，它的parentloader就是BootClassLoader，这个具体代码我没去找，可以简单的打印下日志就能发现，不过这个情况在instant run 的情况下会有所不同，大家可以去研究研究~有点扯远了，这里我想说的是我们传入的应用类加载器中通过findClass也是加载不到我们需要的类的，所以我们还是得去看我们自定义的DexClassLoader中的findClass方法，DexClassLoader中还是没有重写这个方法，那么还是去BaseDexClassLoader中看吧：</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>  	@Override
+    protected Class&lt;?&gt; findClass(String name) throws ClassNotFoundException {
+        Class clazz = pathList.findClass(name);
+        if (clazz == null) {
+            throw new ClassNotFoundException(name);
+        }
+        return clazz;
+    }
+</code></pre>
+</div>
+<p>还记得我们的pathList吗？不记得回头看看上面的图：</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>  	public Class findClass(String name) {
+        for (Element element : dexElements) {
+            DexFile dex = element.dexFile;
+            if (dex != null) {
+                Class clazz = dex.loadClassBinaryName(name, definingContext);
+                if (clazz != null) {
+                    return clazz;
+                }
+            }
+        }
+        return null;
+    }
+</code></pre>
+</div>
+
+<p>Element是不是也很熟悉？就是那个简单的实体类，所以继续到DexFile中去看dex.loadClassBinaryName方法：</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code> 	public Class loadClassBinaryName(String name, ClassLoader loader) {
+        return defineClass(name, loader, mCookie);
+    }
+    private native static Class defineClass(String name, ClassLoader loader, int cookie);
+
+</code></pre>
+</div>
+<p>最终使用了native方法defineClass去加载我们需要的类，注意参数里有个mCookie，它就是openDexFile方法返回的dex文件返回的int值，这样就将我们需要加载的类和我们的dex文件对应起来了，去从我们给定的dex文件中去加载我们需要的类。</p>
+
+<p>至此，我们的加载过程就很清楚了。本文所提及的内容并没有什么技术含量，只是顺着一条主线梳理了下整个过程，对于搞明白一些细节可能还是有点帮助。顺带说一下，其实热修复也是用到了这个加载机制，动态的替换掉有bug的类，因为已经被加载过的类不会再被加载，所以只要我们把修复bug后的类放到有bug那个类之前加载，就能解决问题了。</p>
+
+  </div>
+
+</article>
+
+      </div>
+    </div>
+
+    <footer class="site-footer">
+
+  <div class="wrapper">
+
+    <h2 class="footer-heading">coder_yu's BLOG</h2>
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col footer-col-1">
+        <ul class="contact-list">
+          <li>coder_yu's BLOG</li>
+          <li><a href="mailto:coder_yul@126.com">coder_yul@126.com</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col footer-col-2">
+        <ul class="social-media-list">
+          
+          <li>
+            <a href="https://github.com/shuifengYu"><span class="icon icon--github"><svg viewBox="0 0 16 16"><path fill="#828282" d="M7.999,0.431c-4.285,0-7.76,3.474-7.76,7.761 c0,3.428,2.223,6.337,5.307,7.363c0.388,0.071,0.53-0.168,0.53-0.374c0-0.184-0.007-0.672-0.01-1.32 c-2.159,0.469-2.614-1.04-2.614-1.04c-0.353-0.896-0.862-1.135-0.862-1.135c-0.705-0.481,0.053-0.472,0.053-0.472 c0.779,0.055,1.189,0.8,1.189,0.8c0.692,1.186,1.816,0.843,2.258,0.645c0.071-0.502,0.271-0.843,0.493-1.037 C4.86,11.425,3.049,10.76,3.049,7.786c0-0.847,0.302-1.54,0.799-2.082C3.768,5.507,3.501,4.718,3.924,3.65 c0,0,0.652-0.209,2.134,0.796C6.677,4.273,7.34,4.187,8,4.184c0.659,0.003,1.323,0.089,1.943,0.261 c1.482-1.004,2.132-0.796,2.132-0.796c0.423,1.068,0.157,1.857,0.077,2.054c0.497,0.542,0.798,1.235,0.798,2.082 c0,2.981-1.814,3.637-3.543,3.829c0.279,0.24,0.527,0.713,0.527,1.437c0,1.037-0.01,1.874-0.01,2.129 c0,0.208,0.14,0.449,0.534,0.373c3.081-1.028,5.302-3.935,5.302-7.362C15.76,3.906,12.285,0.431,7.999,0.431z"/></svg>
+</span><span class="username">shuifengYu</span></a>
+
+          </li>
+          
+
+          
+        </ul>
+      </div>
+
+      <div class="footer-col footer-col-3">
+        <p>this is my first blog. Now I'm learning how to build it.</p>
+      </div>
+    </div>
+
+  </div>
+
+</footer>
+
+
+  </body>
+
+</html>
