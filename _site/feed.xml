@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>coder_yu&#39;s BLOG</title>
+    <description>this is my first blog. Now I&#39;m learning how to build it.</description>
+    <link>http://yourdomain.com/</link>
+    <atom:link href="http://yourdomain.com/feed.xml" rel="self" type="application/rss+xml"/>
+    <pubDate>Sat, 09 Jul 2016 16:07:11 +0800</pubDate>
+    <lastBuildDate>Sat, 09 Jul 2016 16:07:11 +0800</lastBuildDate>
+    <generator>Jekyll v3.1.6</generator>
+    
+      <item>
+        <title>第一篇博客</title>
+        <description>&lt;h1 id=&quot;section&quot;&gt;第一篇博客&lt;/h1&gt;
+
+&lt;h2 id=&quot;markdown&quot;&gt;环境搭建测试，使用markdown写测试博客&lt;/h2&gt;
+</description>
+        <pubDate>Mon, 06 Jun 2016 23:10:00 +0800</pubDate>
+        <link>http://yourdomain.com/blog/2016/06/06/FirstBlog.html</link>
+        <guid isPermaLink="true">http://yourdomain.com/blog/2016/06/06/FirstBlog.html</guid>
+        
+        
+        <category>Blog</category>
+        
+      </item>
+    
+  </channel>
+</rss>
