@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Android消息分发及多线程切换之Handler、Message的细枝末节（一）</title>
+  <meta name="description" content="今天来扒一扒Android的消息分发机制和多线程切换过程，也就是我们常常看到用的Handler，Message（还有两个不太看得到的MessageQueue和Looper）它们的原理。额，当然有人会说还有AsyncTask这玩意儿，怎么说呢，反正我是基本没用过AsyncTask，也没见谁喜欢用这个，总感觉使用起来...">
+
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="canonical" href="http://yourdomain.com/blog/2017/01/25/Android%E6%B6%88%E6%81%AF%E5%88%86%E5%8F%91%E5%8F%8A%E5%A4%9A%E7%BA%BF%E7%A8%8B%E5%88%87%E6%8D%A2%E4%B9%8BHandler-Message%E7%9A%84%E7%BB%86%E6%9E%9D%E6%9C%AB%E8%8A%82-%E4%B8%80.html">
+  <link rel="alternate" type="application/rss+xml" title="coder_yu's BLOG" href="http://yourdomain.com/feed.xml">
+</head>
+
+
+  <body>
+
+    <header class="site-header">
+
+  <div class="wrapper">
+
+    <a class="site-title" href="/">coder_yu's BLOG</a>
+
+    <nav class="site-nav">
+      <a href="#" class="menu-icon">
+        <svg viewBox="0 0 18 15">
+          <path fill="#424242" d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.031C17.335,0,18,0.665,18,1.484L18,1.484z"/>
+          <path fill="#424242" d="M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0c0-0.82,0.665-1.484,1.484-1.484 h15.031C17.335,6.031,18,6.696,18,7.516L18,7.516z"/>
+          <path fill="#424242" d="M18,13.516C18,14.335,17.335,15,16.516,15H1.484C0.665,15,0,14.335,0,13.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.031C17.335,12.031,18,12.696,18,13.516L18,13.516z"/>
+        </svg>
+      </a>
+
+      <div class="trigger">
+        
+          
+          <a class="page-link" href="/2016-06-06-welcome-to-jekyll.html">Welcome to Jekyll!</a>
+          
+        
+          
+          <a class="page-link" href="/about/">About</a>
+          
+        
+          
+        
+          
+        
+          
+        
+      </div>
+    </nav>
+
+  </div>
+
+</header>
+
+
+    <div class="page-content">
+      <div class="wrapper">
+        <article class="post" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title" itemprop="name headline">Android消息分发及多线程切换之Handler、Message的细枝末节（一）</h1>
+    <p class="post-meta"><time datetime="2017-01-25T23:10:00+08:00" itemprop="datePublished">Jan 25, 2017</time></p>
+  </header>
+
+  <div class="post-content" itemprop="articleBody">
+    <p>今天来扒一扒Android的消息分发机制和多线程切换过程，也就是我们常常看到用的Handler，Message（还有两个不太看得到的MessageQueue和Looper）它们的原理。额，当然有人会说还有AsyncTask这玩意儿，怎么说呢，反正我是基本没用过AsyncTask，也没见谁喜欢用这个，总感觉使用起来没Handler+Message方便，然而我用的更多的是Handler+Runnable，当然实际上Runnable还是被包装成了Message。</p>
+
+<p>先简单介绍一下这几个类吧：</p>
+
+<ul>
+  <li><strong>Handler:</strong></li>
+</ul>
+
+ 	处理者，一般在主线程创建（在工作线程也可以创建，这个下一篇会详细说到），处理各种线程发送过来的* Message，根据Message内容在主线程做不同的处理。
+<ul>
+  <li>
+    <p><strong>Message:</strong></p>
+
+    <p>消息体，在多线程中担任一个内容载体的角色，包含了消息的类型，参数，数据等内容，其中还包括一个重要的对象，那就是它将会被发送给那个handler。</p>
+  </li>
+  <li>
+    <p><strong>MessageQueue：</strong></p>
+
+    <p>消息队列，所有发送给handler处理的消息都会保存在消息队列中，其内部使用链表的形式维护这些message。</p>
+  </li>
+  <li>
+    <p><strong>Looper：</strong></p>
+
+    <p>这个怎么说呢，它的英文解释为一个打环的装置，我也不知道该怎么翻译，它的作用是可以让线程一直活着，而不是执行完一个功能代码后就死掉了，每个Looper的实例有一个MessageQueue和当前线程对象，正是这两个类让线程可以一直活着，也就是Looper打环的装置的意思吧。我们的主线程就是因为它才可以一直执行而不退出。</p>
+  </li>
+</ul>
+
+<p>上面说到Looper使我们的主线程可以一直运行，究竟是咋回事，上代码！！！</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code> public static void main(String[] args) {
+        ······
+        Looper.prepareMainLooper();
+
+        ActivityThread thread = new ActivityThread();
+        thread.attach(false);
+
+        if (sMainThreadHandler == null) {
+            sMainThreadHandler = thread.getHandler();
+        }
+		······
+        Looper.loop();
+
+        throw new RuntimeException("Main thread loop unexpectedly exited");
+    }
+</code></pre>
+</div>
+<p>没错，就是我们的主线程初始化的地方，也就是应用程序启动的入口。我们的应用对于Android系统而言，说白了也就是一段程序代码，那么程序启动的时候当然得从启动方法开始了，它就是<strong>ActivityThread</strong>中大名鼎鼎的<strong>main()</strong>方法，是不是想起来java中的<strong>main()</strong>方法？我们来看一下这里到底做了哪些事。首先就是调用了<strong>Looper</strong>的静态方法<strong>preoareMainLooper()</strong>:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>	/**
+     * Initialize the current thread as a looper, marking it as an
+     * application's main looper. The main looper for your application
+     * is created by the Android environment, so you should never need
+     * to call this function yourself.  See also: {@link #prepare()}
+     */
+    public static void prepareMainLooper() {
+        prepare(false);
+        synchronized (Looper.class) {
+            if (sMainLooper != null) {
+                throw new IllegalStateException("The main Looper has already been prepared.");
+            }
+            sMainLooper = myLooper();
+        }
+    }
+</code></pre>
+</div>
+<p>这个是源码原封不动的贴上来的，包括注释，可以看到这个方法应该由系统调用，它根据当前线程初始化一个<strong>Looper</strong>对象，并且是应用的”main looper”，也就是方法名所表现的，接着看方法里的第一行调用。</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>	private static void prepare(boolean quitAllowed) {
+        if (sThreadLocal.get() != null) {
+            throw new RuntimeException("Only one Looper may be created per thread");
+        }
+        sThreadLocal.set(new Looper(quitAllowed));
+    }
+    
+    private Looper(boolean quitAllowed) {
+        mQueue = new MessageQueue(quitAllowed);
+        mThread = Thread.currentThread();
+    }
+</code></pre>
+</div>
+
+<p>这里有个<strong>sThreadLocal</strong>，它是一个静态属性：**static final ThreadLocal<Looper> sThreadLocal = new ThreadLocal<Looper>();**，也就是全局就一个，每个线程最多对应一个**Looper**对象，如果有，**Looper**对象都会保存在**sThreadLocal**中，我们简单的把它理解为一个Map就行，key为当前的线程，value为一个**Looper**实例，因为线程（也就是key）在方法调用的时候内部可以取到，所以对它进行get，set操作的时候不需要传key，直接传value就行，那么这个方法就很好理解了，如果之前调用过这个方法，**sThreadLocal.get()**则不为null,直接抛异常（也就说明了一个线程最多只能对应一个**Looper**对象），否则new一个**Looper**对象存到**sThreadLocal**中，**Looper**对象初始化的同时也初始化了一个**MessageQueue**，并且持有了当前线程的引用。</Looper></Looper></p>
+
+<p>好，继续看<strong>prepareMainLooper</strong>方法，判断<strong>sMainLooper</strong>是否为null，第一次调用当然为null，所以<strong>sMainLooper = myLooper();</strong></p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>	/**
+     * Return the Looper object associated with the current thread.  Returns
+     * null if the calling thread is not associated with a Looper.
+     */
+    public static @Nullable Looper myLooper() {
+        return sThreadLocal.get();
+    }
+</code></pre>
+</div>
+<p>很简单，直接调用<strong>sThreadLocal.get()</strong>方法，很眼熟是吧，我们刚刚调用过它的<strong>set()</strong>方法，这个时候还在刚才的线程中呢，所以这里取出来的就是我们刚刚放进去的<strong>new Looper()</strong>，可以稍微看一下这个过程中有个参数就<strong>quitAllowed</strong>，最终被传到了<strong>MessageQueue</strong>的构造器中，应该可以猜到它表示这个<strong>MessageQueue</strong>是否可以被退出或者说这个线程是否能被结束掉，当然因为我们的线程是主线程，所以传<strong>false</strong>。目前为止我们已经完成了<strong>prepareMainLooper()</strong>方法，它所做的事其实很简单，就是将我们的线程作为key在<strong>sThreadLocal</strong>中保存了一个不可退出的<strong>Looper</strong>对象，同时赋值给<strong>sMainLooper</strong>，为什么还要单独定义一个<strong>sMainLooper</strong>呢？首先<strong>sMainLooper</strong>是一个静态属性，且有一个<strong>getMainLooper()</strong>静态方法直接返回<strong>sMainLooper</strong>,所以我猜测是因为主线程的<strong>Looper</strong>对象获取比较频繁，所以单独作为一个属性直接读取，省的每次从<strong>sThreadLocal</strong>中去取，以此减小开销。</p>
+
+<p>下面放一张图作为prepareMainLooper的总结吧，对着图看应该清晰很多：
+<img src="prepareMainLooper.001.jpeg" alt="image" /></p>
+
+<p>回头继续看<strong>main()</strong>方法，接下去new了一个ActivityThread实例<strong>thread</strong>，并且调用了<strong>attach()</strong>方法，然后将<strong>thread.getHandler()</strong>返回给<strong>sMainThreadHandler</strong>，这几行代码主要是初始化了我们的应用进程和Android系统的通信基础，也就是Binder组件，使得我们的应用进程和Android系统能够通信，这里我们只要知道个大概，就是Android系统会发送消息给我们的应用的<strong>ActivityThread</strong>(好吧，其实是它的一个内部类<strong>ApplicationThread</strong>)，然后由<strong>ActivityThread</strong>包装成<strong>Message</strong>放入<strong>sMainLooper</strong>的<strong>MessageQueue</strong>中等待执行。如何执行，请往下看……</p>
+
+<p>再接下去是<strong>Looper.loop()</strong>方法</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>	/**
+     * Run the message queue in this thread. Be sure to call
+     * {@link #quit()} to end the loop.
+     */
+    public static void loop() {
+        final Looper me = myLooper();
+        if (me == null) {
+            throw new RuntimeException("No Looper; Looper.prepare() wasn't called on this thread.");
+        }
+        final MessageQueue queue = me.mQueue;
+		······
+        for (;;) {
+            Message msg = queue.next(); // might block
+            if (msg == null) {
+                // No message indicates that the message queue is quitting.
+                return;
+            }
+
+          	······
+
+            msg.target.dispatchMessage(msg);
+
+            ······
+
+            msg.recycleUnchecked();
+        }
+    }
+</code></pre>
+</div>
+<p>可以看到以上代码逻辑也十分简单，获取当前线程的<strong>Looper</strong>对象，进而获取<strong>Looper</strong>对象中的<strong>MessageQueue</strong>保存为<strong>queue</strong>，然后进入死循环，每次都从<strong>queue</strong>中取下一个<strong>Message</strong>，得到<strong>Message</strong>后直接调用<strong>Message</strong>对象中保存的目标<strong>handler</strong>的<strong>dispatchMessage（）</strong>方法，然后回收<strong>Message</strong>进入下一次循环。至此，我们的主线程才成为了真正意义上的主线程。上面说到Android系统会给我们应用发消息，然后消息被包装成<strong>Message</strong>保存在<strong>MessageQueue</strong>中，而在<strong>loop()</strong>方法中我们又去取下一个<strong>Message</strong>，是不是发现了什么？不错，我们应用中的各种系统方法的调用其实都是都将Android系统发送的消息包装成<strong>Message</strong>保存到我们的应用主线程绑定的<strong>sMainLooper</strong>中的<strong>MessageQueue</strong>中，然后由这个死循环从<strong>MessageQueue</strong>中取依次出<strong>Message</strong>消息进而执行对应的方法，这样一个完整的消息传递过程就打通了！</p>
+
+<p>老样子，看图：
+<img src="loop.001.jpeg" alt="image" /></p>
+
+<p>我个人认为以上内容已经是<strong>Handler</strong>和<strong>Message</strong>完成多线程切换和消息传递的核心内容了，主要也就是<strong>Looper</strong>类的用处和用法，看懂了这些内容再看整个流程会很轻松，所以如果还没理解的话建议再看几遍，或者直接去看看Looper的源码更好。</p>
+
+<p>其实还一个比较关键的步骤：如何从<strong>MessageQueue</strong>取<strong>Message</strong>，不过个人感觉就算这个过程对于理解整个消息传递机制影响不大，只要知道<strong>MessageQueue</strong>以链表的形式维护这每个进入队列的<strong>Message</strong>就行了。有兴趣的小伙伴也可以看看源码，我就在这里贴一下<strong>MessageQueue.next()</strong>方法的源码吧：</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>	Message next() {
+        // Return here if the message loop has already quit and been disposed.
+        // This can happen if the application tries to restart a looper after quit
+        // which is not supported.
+        final long ptr = mPtr;
+        if (ptr == 0) {
+            return null;
+        }
+
+        int pendingIdleHandlerCount = -1; // -1 only during first iteration
+        int nextPollTimeoutMillis = 0;
+        for (;;) {
+            if (nextPollTimeoutMillis != 0) {
+                Binder.flushPendingCommands();
+            }
+
+            nativePollOnce(ptr, nextPollTimeoutMillis);
+
+            synchronized (this) {
+                // Try to retrieve the next message.  Return if found.
+                final long now = SystemClock.uptimeMillis();
+                Message prevMsg = null;
+                Message msg = mMessages;
+                if (msg != null &amp;&amp; msg.target == null) {
+                    // Stalled by a barrier.  Find the next asynchronous message in the queue.
+                    do {
+                        prevMsg = msg;
+                        msg = msg.next;
+                    } while (msg != null &amp;&amp; !msg.isAsynchronous());
+                }
+                if (msg != null) {
+                    if (now &lt; msg.when) {
+                        // Next message is not ready.  Set a timeout to wake up when it is ready.
+                        nextPollTimeoutMillis = (int) Math.min(msg.when - now, Integer.MAX_VALUE);
+                    } else {
+                        // Got a message.
+                        mBlocked = false;
+                        if (prevMsg != null) {
+                            prevMsg.next = msg.next;
+                        } else {
+                            mMessages = msg.next;
+                        }
+                        msg.next = null;
+                        if (DEBUG) Log.v(TAG, "Returning message: " + msg);
+                        msg.markInUse();
+                        return msg;
+                    }
+                } else {
+                    // No more messages.
+                    nextPollTimeoutMillis = -1;
+                }
+
+                // Process the quit message now that all pending messages have been handled.
+                if (mQuitting) {
+                    dispose();
+                    return null;
+                }
+
+                // If first time idle, then get the number of idlers to run.
+                // Idle handles only run if the queue is empty or if the first message
+                // in the queue (possibly a barrier) is due to be handled in the future.
+                if (pendingIdleHandlerCount &lt; 0
+                        &amp;&amp; (mMessages == null || now &lt; mMessages.when)) {
+                    pendingIdleHandlerCount = mIdleHandlers.size();
+                }
+                if (pendingIdleHandlerCount &lt;= 0) {
+                    // No idle handlers to run.  Loop and wait some more.
+                    mBlocked = true;
+                    continue;
+                }
+
+                if (mPendingIdleHandlers == null) {
+                    mPendingIdleHandlers = new IdleHandler[Math.max(pendingIdleHandlerCount, 4)];
+                }
+                mPendingIdleHandlers = mIdleHandlers.toArray(mPendingIdleHandlers);
+            }
+
+            // Run the idle handlers.
+            // We only ever reach this code block during the first iteration.
+            for (int i = 0; i &lt; pendingIdleHandlerCount; i++) {
+                final IdleHandler idler = mPendingIdleHandlers[i];
+                mPendingIdleHandlers[i] = null; // release the reference to the handler
+
+                boolean keep = false;
+                try {
+                    keep = idler.queueIdle();
+                } catch (Throwable t) {
+                    Log.wtf(TAG, "IdleHandler threw exception", t);
+                }
+
+                if (!keep) {
+                    synchronized (this) {
+                        mIdleHandlers.remove(idler);
+                    }
+                }
+            }
+
+            // Reset the idle handler count to 0 so we do not run them again.
+            pendingIdleHandlerCount = 0;
+
+            // While calling an idle handler, a new message could have been delivered
+            // so go back and look again for a pending message without waiting.
+            nextPollTimeoutMillis = 0;
+        }
+    }
+
+</code></pre>
+</div>
+<p>本来只想写一篇的，不过感觉好像有点长了，这样的话就再写一篇吧，这篇就当做是理论知识的一个补充，接下去讲讲顺着实际应用过程的线索，一步步是如何将消息放入<strong>MessageQueue</strong>到最后执行的~</p>
+
+  </div>
+
+</article>
+
+      </div>
+    </div>
+
+    <footer class="site-footer">
+
+  <div class="wrapper">
+
+    <h2 class="footer-heading">coder_yu's BLOG</h2>
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col footer-col-1">
+        <ul class="contact-list">
+          <li>coder_yu's BLOG</li>
+          <li><a href="mailto:coder_yul@126.com">coder_yul@126.com</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col footer-col-2">
+        <ul class="social-media-list">
+          
+          <li>
+            <a href="https://github.com/shuifengYu"><span class="icon icon--github"><svg viewBox="0 0 16 16"><path fill="#828282" d="M7.999,0.431c-4.285,0-7.76,3.474-7.76,7.761 c0,3.428,2.223,6.337,5.307,7.363c0.388,0.071,0.53-0.168,0.53-0.374c0-0.184-0.007-0.672-0.01-1.32 c-2.159,0.469-2.614-1.04-2.614-1.04c-0.353-0.896-0.862-1.135-0.862-1.135c-0.705-0.481,0.053-0.472,0.053-0.472 c0.779,0.055,1.189,0.8,1.189,0.8c0.692,1.186,1.816,0.843,2.258,0.645c0.071-0.502,0.271-0.843,0.493-1.037 C4.86,11.425,3.049,10.76,3.049,7.786c0-0.847,0.302-1.54,0.799-2.082C3.768,5.507,3.501,4.718,3.924,3.65 c0,0,0.652-0.209,2.134,0.796C6.677,4.273,7.34,4.187,8,4.184c0.659,0.003,1.323,0.089,1.943,0.261 c1.482-1.004,2.132-0.796,2.132-0.796c0.423,1.068,0.157,1.857,0.077,2.054c0.497,0.542,0.798,1.235,0.798,2.082 c0,2.981-1.814,3.637-3.543,3.829c0.279,0.24,0.527,0.713,0.527,1.437c0,1.037-0.01,1.874-0.01,2.129 c0,0.208,0.14,0.449,0.534,0.373c3.081-1.028,5.302-3.935,5.302-7.362C15.76,3.906,12.285,0.431,7.999,0.431z"/></svg>
+</span><span class="username">shuifengYu</span></a>
+
+          </li>
+          
+
+          
+        </ul>
+      </div>
+
+      <div class="footer-col footer-col-3">
+        <p>this is my first blog. Now I'm learning how to build it.</p>
+      </div>
+    </div>
+
+  </div>
+
+</footer>
+
+
+  </body>
+
+</html>

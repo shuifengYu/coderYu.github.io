@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Android消息分发及多线程切换之Handler、Message的细枝末节（二）</title>
+  <meta name="description" content="之前说了Android消息分发和多线程切换的核心知识点，这次来说一下消息传递的整个过程，好像上一篇内容不看貌似也可以直接看这篇，不过建议还是看一下可以了解的更透彻一点吧~~">
+
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="canonical" href="http://yourdomain.com/blog/2017/02/06/Android%E6%B6%88%E6%81%AF%E5%88%86%E5%8F%91%E5%8F%8A%E5%A4%9A%E7%BA%BF%E7%A8%8B%E5%88%87%E6%8D%A2%E4%B9%8BHandler-Message%E7%9A%84%E7%BB%86%E6%9E%9D%E6%9C%AB%E8%8A%82-%E4%BA%8C.html">
+  <link rel="alternate" type="application/rss+xml" title="coder_yu's BLOG" href="http://yourdomain.com/feed.xml">
+</head>
+
+
+  <body>
+
+    <header class="site-header">
+
+  <div class="wrapper">
+
+    <a class="site-title" href="/">coder_yu's BLOG</a>
+
+    <nav class="site-nav">
+      <a href="#" class="menu-icon">
+        <svg viewBox="0 0 18 15">
+          <path fill="#424242" d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.031C17.335,0,18,0.665,18,1.484L18,1.484z"/>
+          <path fill="#424242" d="M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0c0-0.82,0.665-1.484,1.484-1.484 h15.031C17.335,6.031,18,6.696,18,7.516L18,7.516z"/>
+          <path fill="#424242" d="M18,13.516C18,14.335,17.335,15,16.516,15H1.484C0.665,15,0,14.335,0,13.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.031C17.335,12.031,18,12.696,18,13.516L18,13.516z"/>
+        </svg>
+      </a>
+
+      <div class="trigger">
+        
+          
+          <a class="page-link" href="/2016-06-06-welcome-to-jekyll.html">Welcome to Jekyll!</a>
+          
+        
+          
+          <a class="page-link" href="/about/">About</a>
+          
+        
+          
+        
+          
+        
+          
+        
+      </div>
+    </nav>
+
+  </div>
+
+</header>
+
+
+    <div class="page-content">
+      <div class="wrapper">
+        <article class="post" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title" itemprop="name headline">Android消息分发及多线程切换之Handler、Message的细枝末节（二）</h1>
+    <p class="post-meta"><time datetime="2017-02-06T23:10:00+08:00" itemprop="datePublished">Feb 6, 2017</time></p>
+  </header>
+
+  <div class="post-content" itemprop="articleBody">
+    <p>之前说了Android消息分发和多线程切换的核心知识点，这次来说一下消息传递的整个过程，好像上一篇内容不看貌似也可以直接看这篇，不过建议还是看一下可以了解的更透彻一点吧~~</p>
+
+<p>上一篇请看：http://www.jianshu.com/p/e914cda1b5fe</p>
+
+<p>下面开始本篇的主题吧，我将按照Handler和Message的一般使用流程，跟着代码调用链一步步往下走，所以，看代码吧！</p>
+
+<p>首先在主线程定义一个handler：</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>	Handler handler = new Handler(){
+            @Override
+            public void handleMessage(Message msg) {
+                super.handleMessage(msg);
+                switch (msg.what){
+                    case TEST:
+                        handleTest(msg);
+                        break;
+                    default:
+                        handleDefault(msg);
+                        break;
+                }
+            }
+       };
+</code></pre>
+</div>
+<p>然后在工作线程中使用拿到handler的引用，直接使用：</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>	new Thread(){
+            @Override
+            public void run() {
+                super.run();
+                Message message = Message.obtain();
+                message.what = TEST;
+                Bundle bundle =new Bundle();
+                bundle.putString("test key","test value");
+                message.setData(bundle);
+       			handler.sendMessage(msg);                
+            }
+        }.start();
+</code></pre>
+</div>
+<p>以上即为一个简单使用场景，在工作线程中通过将Message发送到主线程的handler，让handler在主线程中处理UI相关的操作。</p>
+
+<p>我们从第一段代码开始，先看一下Handler的创建过程。很简单，直接new一个Handler对象，然后实现它的<strong>handleMessage(Message msg)</strong>方法，但是这个handler可不是随便哪里都能创建的，相信很多同学肯定也碰到过在别的线程中创建handler报错的情况，类似<code class="highlighter-rouge">Can't create handler inside thread that has not called Looper.prepare()</code>这样的错误提示，为啥呢？</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>	/**
+     * Default constructor associates this handler with the {@link Looper} for the
+     * current thread.
+     *
+     * If this thread does not have a looper, this handler won't be able to receive messages
+     * so an exception is thrown.
+     */
+    public Handler() {
+        this(null, false);
+    }
+    
+   
+    public Handler(Callback callback, boolean async) {
+        if (FIND_POTENTIAL_LEAKS) {
+            final Class&lt;? extends Handler&gt; klass = getClass();
+            if ((klass.isAnonymousClass() || klass.isMemberClass() || klass.isLocalClass()) &amp;&amp;
+                    (klass.getModifiers() &amp; Modifier.STATIC) == 0) {
+                Log.w(TAG, "The following Handler class should be static or leaks might occur: " +
+                    klass.getCanonicalName());
+            }
+        }
+
+        mLooper = Looper.myLooper();
+        if (mLooper == null) {
+            throw new RuntimeException(
+                "Can't create handler inside thread that has not called Looper.prepare()");
+        }
+        mQueue = mLooper.mQueue;
+        mCallback = callback;
+        mAsynchronous = async;
+    }
+    
+</code></pre>
+</div>
+
+<p>最终调用到的构造器中的第一处判断是用来检测内存泄露相关的，我们不管，看<strong>mLooper</strong>变量的赋值：</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>	/**
+     * Return the Looper object associated with the current thread.  Returns
+     * null if the calling thread is not associated with a Looper.
+     */
+    public static @Nullable Looper myLooper() {
+        return sThreadLocal.get();
+    }
+</code></pre>
+</div>
+<p><strong>sThreadLocal.get()</strong>方法上一篇我们讲过了，<strong>sThreadLocal</strong>是一个全局的静态变量，保存着线程对应的<strong>looper</strong>对象，<strong>get()</strong>方法用来获取当前线程对应的<strong>looper</strong>对象，由于我们这个<strong>handler</strong>是在主线程中创建的，而主线程在<strong>ActivityThread</strong>的<strong>main()</strong>方法中已经为我们创建了对应的<strong>looper</strong>对象，因此我们这里去get的话是能取到值的，所以下面一行的判断不会抛异常。但是一般的工作线程，我们如果没用为它创建<strong>Looper</strong>对象，它是没有对应的<strong>Looper</strong>对象保存在<strong>sThreadLocal</strong>中的，因此<strong>Looper.myLooper()</strong>就会返回null，接下去就会报错，也就是上面说的在工作线程中创建handler会报错的原因。取到<strong>mLooper</strong>之后，将<strong>mLooper</strong>中的保存<strong>Message</strong>的<strong>MessageQueue</strong>也取出保存在<strong>handler</strong>的属性<strong>mQueue</strong>中，然后将构造器的参数<strong>callback</strong>和<strong>async</strong>赋值，我们这里都为null。</p>
+
+<p>这里大致介绍下<strong>Handler</strong>的几个属性：</p>
+
+<ul>
+  <li>
+    <p><strong>boolean mAsynchronous：</strong></p>
+
+    <p>这个是用来表明处理<strong>Message</strong>的时候是否需要保证顺序，默认为false，而且我们其实也没办法去将他设置为true，因为这些构造器都是<code class="highlighter-rouge">@hide</code>的，所以我们可以不管它。</p>
+  </li>
+  <li>
+    <p><strong>Callback mCallback：</strong></p>
+
+    <p>这个是Handler的内部接口<strong>Callback</strong>类型的一个属性，它就一个方法，也叫
+<strong>handleMessage(Message msg)</strong>,只能在构造器中传参，如果我们在构造器中给了这个参数，那么发送给这个<strong>handler</strong>的消息将优先会由这个<strong>mCallback</strong>来执行，不过目前为止我并不清楚哪些场景适用这种方式，知道的同学欢迎指教一下~</p>
+  </li>
+  <li>
+    <p><strong>Looper mLooper:</strong></p>
+
+    <p><strong>handler</strong>是用来处理<strong>Message</strong>的，因此我们必须要有<strong>Message</strong>来源，而<strong>Message</strong>的来源<strong>MessageQueue</strong>是在<strong>Looper</strong>中的，因此<strong>handler</strong>需要一个<strong>Looper</strong>属性。一般情况下<strong>mLooper</strong>即为主线程或者说是创建它的线程所对应的<strong>Looper</strong>,但是我们也可以传一个Looper对象给它，关于这个可以看看<code class="highlighter-rouge">HandlerThread</code>的相关知识。</p>
+  </li>
+  <li>
+    <p><strong>MessageQueue mQueue：</strong></p>
+
+    <p>没啥好说的，这个就是<strong>handler</strong>要处理的消息的来源了,它和<strong>Looper</strong>中的<strong>mQueue</strong>指向同一个对象。</p>
+  </li>
+</ul>
+
+<p>在看一下<strong>Handler</strong>的消息分发方法：</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>	/**
+     * Handle system messages here.
+     */
+    public void dispatchMessage(Message msg) {
+        if (msg.callback != null) {
+            handleCallback(msg);
+        } else {
+            if (mCallback != null) {
+                if (mCallback.handleMessage(msg)) {
+                    return;
+                }
+            }
+            handleMessage(msg);
+        }
+    }
+    
+    private static void handleCallback(Message message) {
+        message.callback.run();
+    }
+</code></pre>
+</div>
+<p>还记得上一篇中最后线程停留的那个死循环吗，里面有一行代码<code class="highlighter-rouge"> msg.target.dispatchMessage(msg);</code>,这里每次取出的<strong>Message</strong>都会被它对应的<strong>target</strong>也就是<strong>Handler</strong>对象分发，也就是上面这段代码。</p>
+
+<p>可以看到首先会判断<strong>Message</strong>对象自己的<strong>callback</strong>是否为空，它是一个<strong>Runnable</strong>对象，如果不为空直接调用<strong>callback</strong>的<strong>run()</strong>方法，否则判断<strong>handler</strong>的属性<strong>mCallback</strong>是否为空，属性介绍的时候已经讲过这个了，如果不为空则则调用<strong>mCallback.handleMessage(msg)</strong>方法，这个方法返回true就直接return，否则调用<strong>handler</strong>的<strong>handlerMessage(msg)</strong>方法，也就是我们要继承<strong>Handler</strong>要实现的方法，这个是不是有点类似于Android系统的屏幕事件传递机制呢？哈哈~</p>
+
+<p>话说第一篇里有个坑还没填，就是如何在工作线程创建使用<strong>Handler</strong>，不过相信看到这里的同学应该已经心里有底了吧，参考上一篇中<strong>ActivityThread</strong>中的<strong>main()</strong>方法，很容易创建自己的无线循环工作线程了，下面直接给出代码：</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>	new Thread(){
+            Handler handler;
+            @Override
+            public void run() {
+                super.run();
+                Looper.prepare();
+                 handler = new Handler(){
+                    @Override
+                    public void handleMessage(Message msg) {
+                        super.handleMessage(msg);
+                        //handler the message
+                    }
+                };
+                Looper.loop();
+            }
+        };
+</code></pre>
+</div>
+<p>以上，即在工作线程中创建了<strong>handler</strong>,然后将<strong>handler</strong>的引用丢给别的线程，别的线程就可以通过<strong>handler</strong>发消息到这个工作线程来处理。</p>
+
+<p><strong>Handler</strong>对于消息的分发和处理的逻辑总算说完了，接下去看看<strong>Message</strong>是如何被送到<strong>Handler</strong>的。
+先看下<strong>Message</strong>的基本信息吧：</p>
+
+<ul>
+  <li>
+    <p><strong>int what:</strong></p>
+
+    <p>表明消息的类别，<strong>handler</strong>根据这个字段来判断如何处理这个<strong>Message</strong></p>
+  </li>
+  <li>
+    <p><strong>Bundle data：</strong></p>
+
+    <p>用于存放数据，可以存放一些相对复杂的内容，因此开销稍微大一点</p>
+  </li>
+  <li>
+    <p><strong>int arg1,arg2:</strong></p>
+
+    <p>两个基本类型的参数，用于传递一些简单的<strong>Message</strong>信息，可以的话尽量用这两个参数来传递信息，相对于<strong>Bundle data</strong>它性能消耗会小很多</p>
+  </li>
+  <li>
+    <p><strong>int flags:</strong></p>
+
+    <p>当前<strong>Message</strong>状态的一个标志位，类似异步，使用中这些状态</p>
+  </li>
+  <li>
+    <p><strong>long when：</strong></p>
+
+    <p>表示这个<strong>Message</strong>应该在何时被执行，<strong>MessageQueue</strong>中<strong>Message</strong>就是以这个字段为来排序的</p>
+  </li>
+  <li>
+    <p><strong>Handler target：</strong></p>
+
+    <p><strong>Message</strong>将要被发送的对象，也就是由哪个target来接受处理这个<strong>Message</strong>，<strong>这个字段必须不为null</strong></p>
+  </li>
+  <li>
+    <p><strong>Runnable callback：</strong></p>
+
+    <p>这个讲<strong>handler</strong>的时候说到过了，如果有这个字段，那么这个<strong>Message</strong>将由此<strong>callback</strong>来处理，注意下，它是一个<strong>Runnable</strong></p>
+  </li>
+  <li>
+    <p><strong>Message next:</strong></p>
+
+    <p>由于<strong>Message</strong>在消息池中是链表的形式维护的，所以这个字段表示下一个<strong>Message</strong>对象</p>
+  </li>
+  <li>
+    <p><strong>static Message sPool：</strong></p>
+
+    <p>这个是静态变量，指向当前消息池的第一个空闲<strong>Message</strong></p>
+  </li>
+  <li>
+    <p><strong>static int sPoolSize:</strong></p>
+
+    <p>消息池的大小，也就是剩余空闲<strong>Message</strong>的数量</p>
+  </li>
+  <li>
+    <p><strong>static final int MAX_POOL_SIZE = 50;</strong></p>
+
+    <p>不用解释了吧？</p>
+  </li>
+</ul>
+
+<p>再贴一下例子中的第二段代码：</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>	new Thread(){
+            @Override
+            public void run() {
+                super.run();
+                Message message = Message.obtain();
+                message.what = TEST;
+                Bundle bundle =new Bundle();
+                bundle.putString("test key","test value");
+                message.setData(bundle);
+       			handler.sendMessage(msg);                
+            }
+        }.start();
+        
+</code></pre>
+</div>
+
+<p><strong>Message</strong>的获取方式特别多，除了自己new一个外，其他基本都大同小异，最终都从<strong>Message</strong>消息池取一个空闲的<strong>Message</strong>使用，因为Android系统中到处都用到了<strong>Message</strong>，因此会需要大量的<strong>Message</strong>对象，使用消息池的方式可以减少频繁的创建销毁对象，大大的提高性能。我这里直接用最基本的方式获取，<code class="highlighter-rouge">Message.obtain();</code>,看源码吧：</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>	/**
+     * Return a new Message instance from the global pool. Allows us to
+     * avoid allocating new objects in many cases.
+     */
+    public static Message obtain() {
+        synchronized (sPoolSync) {
+            if (sPool != null) {
+                Message m = sPool;
+                sPool = m.next;
+                m.next = null;
+                m.flags = 0; // clear in-use flag
+                sPoolSize--;
+                return m;
+            }
+        }
+        return new Message();
+    }
+</code></pre>
+</div>
+<p>对着上面的字段介绍，很容易看出这个方法的作用就是将消息池的第一个空闲<strong>Message</strong>拿出来，然后消息池的数量减1，当然如果消息池已经没用空闲<strong>Message</strong>了，那就new一个返回了。</p>
+
+<p>例子中只用到了<strong>what</strong>和<strong>data</strong>字段，简单给它们赋了值，然后就调用<strong>handler.sendMessage(msg); **将消息发送给了我们在主线程创建的</strong>handler**了。</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>	public final boolean sendMessage(Message msg)
+    {
+        return sendMessageDelayed(msg, 0);
+    }
+    
+    public final boolean sendMessageDelayed(Message msg, long delayMillis)
+    {
+        if (delayMillis &lt; 0) {
+            delayMillis = 0;
+        }
+        return sendMessageAtTime(msg, SystemClock.uptimeMillis() + delayMillis);
+    }
+    
+    /**
+     * Enqueue a message into the message queue after all pending messages
+     * before the absolute time (in milliseconds) &lt;var&gt;uptimeMillis&lt;/var&gt;.
+     * &lt;b&gt;The time-base is {@link android.os.SystemClock#uptimeMillis}.&lt;/b&gt;
+     * Time spent in deep sleep will add an additional delay to execution.
+     * You will receive it in {@link #handleMessage}, in the thread attached
+     * to this handler.
+     * 
+     * @param uptimeMillis The absolute time at which the message should be
+     *         delivered, using the
+     *         {@link android.os.SystemClock#uptimeMillis} time-base.
+     *         
+     * @return Returns true if the message was successfully placed in to the 
+     *         message queue.  Returns false on failure, usually because the
+     *         looper processing the message queue is exiting.  Note that a
+     *         result of true does not mean the message will be processed -- if
+     *         the looper is quit before the delivery time of the message
+     *         occurs then the message will be dropped.
+     */
+    public boolean sendMessageAtTime(Message msg, long uptimeMillis) {
+        MessageQueue queue = mQueue;
+        if (queue == null) {
+            RuntimeException e = new RuntimeException(
+                    this + " sendMessageAtTime() called with no mQueue");
+            Log.w("Looper", e.getMessage(), e);
+            return false;
+        }
+        return enqueueMessage(queue, msg, uptimeMillis);
+    }
+</code></pre>
+</div>
+<p>前面两个方法的注释我没贴，因为跟第三个方法内容差不多，而且最终也都是调用第三个方法，所以看了第三个方法的注释和方法体应该很容易明白前两个方法的作用。
+第一个方法是直接将消息发送handler处理，所以它使用0毫秒的延时作为参数调用第二个方法，第二个方法判断如果延时小于0则默认给0，因为小于0的延迟也就意味着比当前时间早，当然不可能回到过去处理这个消息了，然后它又将当前时间加上延时，调用了第三个方法，这样第三个方法拿到的时间就是一个绝对值了，然后我们看到了<strong>mQueue</strong>，这个创建<strong>handler</strong>的时候我们就看到了，指向主线程对应的<strong>Looper</strong>中的消息队列，最后return了一个方法调用，看名字终于要加入消息队列了。</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code> 	private boolean enqueueMessage(MessageQueue queue, Message msg, long uptimeMillis) {
+        msg.target = this;
+        if (mAsynchronous) {
+            msg.setAsynchronous(true);
+        }
+        return queue.enqueueMessage(msg, uptimeMillis);
+    }
+</code></pre>
+</div>
+<p>等等，原来我们刚才发送的<strong>Message</strong>还没对象呢，那啥，我不是说那个对象，正经点儿！所以加入消息队列前先给它一个对象吧！然后如果我们的<strong>handler</strong>是异步的将<strong>msg</strong>的<strong>flag</strong>标志位加上成异步,这下<strong>msg</strong>开开心心地领着对象去排队了~</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>	//MessageQueue
+	boolean enqueueMessage(Message msg, long when) {
+        if (msg.target == null) {
+            throw new IllegalArgumentException("Message must have a target.");
+        }
+        if (msg.isInUse()) {
+            throw new IllegalStateException(msg + " This message is already in use.");
+        }
+
+        synchronized (this) {
+            if (mQuitting) {
+                IllegalStateException e = new IllegalStateException(
+                        msg.target + " sending message to a Handler on a dead thread");
+                Log.w(TAG, e.getMessage(), e);
+                msg.recycle();
+                return false;
+            }
+
+            msg.markInUse();
+            msg.when = when;
+            Message p = mMessages;
+            boolean needWake;
+            if (p == null || when == 0 || when &lt; p.when) {
+                // New head, wake up the event queue if blocked.
+                msg.next = p;
+                mMessages = msg;
+                needWake = mBlocked;
+            } else {
+                // Inserted within the middle of the queue.  Usually we don't have to wake
+                // up the event queue unless there is a barrier at the head of the queue
+                // and the message is the earliest asynchronous message in the queue.
+                needWake = mBlocked &amp;&amp; p.target == null &amp;&amp; msg.isAsynchronous();
+                Message prev;
+                for (;;) {
+                    prev = p;
+                    p = p.next;
+                    if (p == null || when &lt; p.when) {
+                        break;
+                    }
+                    if (needWake &amp;&amp; p.isAsynchronous()) {
+                        needWake = false;
+                    }
+                }
+                msg.next = p; // invariant: p == prev.next
+                prev.next = msg;
+            }
+
+            // We can assume mPtr != 0 because mQuitting is false.
+            if (needWake) {
+                nativeWake(mPtr);
+            }
+        }
+        return true;
+    }
+
+</code></pre>
+</div>
+<p>首先判断<strong>Message</strong>的对象<strong>target</strong>是否为空(所以说<strong>Message</strong>不能没有对象<strong>target</strong>),然后判断<strong>Message</strong>是否正在使用中,在经历的前面的入队步骤后，我们这个<strong>Message</strong>都满足了条件，然后进入一个同步块，首先判断是否正在退出中，因为主线程是不可退出的，所以我们也不用考虑，不过里面方法也是一目了然，回收<strong>Message</strong>,返回<strong>false</strong>通知上层入队失败。我们继续看满足条件的情况下，将<strong>Message</strong>标记为在使用中(<code class="highlighter-rouge">msg.markInUse()</code>),给<strong>when</strong>字段赋值，然后创建一个新对象指向消息队列中的第一个消息<strong>mMessage</strong>，定义了一个布尔类型的字段<strong>needWake</strong>,表示是否需要唤醒当前线程，因为没有消息需要处理的时候我们的Looper线程是阻塞的。当消息队列中的第一个消息为<strong>null</strong>或者我们本次需要入队的消息对象<strong>msg</strong>的<strong>when</strong>为0或者小于原来的队首消息的<strong>when</strong>值，则将<strong>msg</strong>插入到消息队列的队首，也就是<strong>mMessage</strong>之前，然后<strong>mMessage</strong>重新指向新的队首，也就是<strong>msg</strong>；当那些条件不满足的时候，则需要将<strong>msg</strong>插入到消息队列中而不是队首，插入的方式也很简单除暴，遍历原队列的消息，依次比对<strong>when</strong>的值，直到队尾或者找到下一个消息的<strong>when</strong>值比<strong>msg</strong>的<strong>when</strong>值大的时候跳出循环，将<strong>msg</strong>插到其中，这个入队的过程也就完成了，都是一些链表的基本操作。之前也有说到，因为每次有消息进入<strong>mQueue</strong>，我们都是以这种方式来插入的，所以有序的消息队列就是简单以消息的<strong>when</strong>的大小来排序的。消息插入到消息队列完成后，判断是否需要唤醒主线程，需要则调用native方法<strong>nativeWake()</strong>唤醒主线程来处理消息（<code class="highlighter-rouge"> Message msg = queue.next();//Looper.loop()方法中被唤醒后取出消息并分发处理</code>）。最后返回<strong>true</strong>表明消息插入队列成功。这样<strong>Message</strong>入队的过程就算完成了，是不是挺简单的~</p>
+
+<p>以上，就是一个完整的消息传递和分发过程。实际使用中，我们用到更多的可能是<code class="highlighter-rouge">handler.post(runnable);</code>,<code class="highlighter-rouge">handler.postDelayed(runnable,delayMillis);</code>,<code class="highlighter-rouge">view.postDelayed(runnable,delayMillis);</code>之类的方法，这些方法看上去好像没有<strong>Message</strong>什么事，但是点进去一看就发现，这个被post的<strong>runnable</strong>就是<strong>Message</strong>的<strong>callback</strong>，简单封装一下就又走上了刚刚讲完的消息传递路线，还没反应过来的回头看看<strong>handler</strong>的<strong>dispatchMessage(Message msg)</strong>方法，因此这些方式我们都不用重写<strong>handleMessage(Message msg)</strong>方法,使用起来非常方便。<strong><em>友情提示：非常方便的同时也非常容易导致内存泄露、空指针和其他一些状态紊乱的错误（别问我怎么知道的，死过太多脑细胞😭），慎用！！！</em></strong></p>
+
+
+  </div>
+
+</article>
+
+      </div>
+    </div>
+
+    <footer class="site-footer">
+
+  <div class="wrapper">
+
+    <h2 class="footer-heading">coder_yu's BLOG</h2>
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col footer-col-1">
+        <ul class="contact-list">
+          <li>coder_yu's BLOG</li>
+          <li><a href="mailto:coder_yul@126.com">coder_yul@126.com</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col footer-col-2">
+        <ul class="social-media-list">
+          
+          <li>
+            <a href="https://github.com/shuifengYu"><span class="icon icon--github"><svg viewBox="0 0 16 16"><path fill="#828282" d="M7.999,0.431c-4.285,0-7.76,3.474-7.76,7.761 c0,3.428,2.223,6.337,5.307,7.363c0.388,0.071,0.53-0.168,0.53-0.374c0-0.184-0.007-0.672-0.01-1.32 c-2.159,0.469-2.614-1.04-2.614-1.04c-0.353-0.896-0.862-1.135-0.862-1.135c-0.705-0.481,0.053-0.472,0.053-0.472 c0.779,0.055,1.189,0.8,1.189,0.8c0.692,1.186,1.816,0.843,2.258,0.645c0.071-0.502,0.271-0.843,0.493-1.037 C4.86,11.425,3.049,10.76,3.049,7.786c0-0.847,0.302-1.54,0.799-2.082C3.768,5.507,3.501,4.718,3.924,3.65 c0,0,0.652-0.209,2.134,0.796C6.677,4.273,7.34,4.187,8,4.184c0.659,0.003,1.323,0.089,1.943,0.261 c1.482-1.004,2.132-0.796,2.132-0.796c0.423,1.068,0.157,1.857,0.077,2.054c0.497,0.542,0.798,1.235,0.798,2.082 c0,2.981-1.814,3.637-3.543,3.829c0.279,0.24,0.527,0.713,0.527,1.437c0,1.037-0.01,1.874-0.01,2.129 c0,0.208,0.14,0.449,0.534,0.373c3.081-1.028,5.302-3.935,5.302-7.362C15.76,3.906,12.285,0.431,7.999,0.431z"/></svg>
+</span><span class="username">shuifengYu</span></a>
+
+          </li>
+          
+
+          
+        </ul>
+      </div>
+
+      <div class="footer-col footer-col-3">
+        <p>this is my first blog. Now I'm learning how to build it.</p>
+      </div>
+    </div>
+
+  </div>
+
+</footer>
+
+
+  </body>
+
+</html>

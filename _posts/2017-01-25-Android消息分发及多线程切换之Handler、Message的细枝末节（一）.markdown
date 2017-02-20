@@ -1,7 +1,7 @@
 ---
 layout: post
 title:  "Android消息分发及多线程切换之Handler、Message的细枝末节（一）"
-date:   2016-06-06 23:10:00 +0800
+date:   2017-01-25 23:10:00 +0800
 categories: Blog
 ---
 

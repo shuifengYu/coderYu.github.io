@@ -5,9 +5,673 @@
     <description>this is my first blog. Now I&#39;m learning how to build it.</description>
     <link>http://yourdomain.com/</link>
     <atom:link href="http://yourdomain.com/feed.xml" rel="self" type="application/rss+xml"/>
-    <pubDate>Sat, 09 Jul 2016 16:07:11 +0800</pubDate>
-    <lastBuildDate>Sat, 09 Jul 2016 16:07:11 +0800</lastBuildDate>
+    <pubDate>Mon, 20 Feb 2017 22:44:42 +0800</pubDate>
+    <lastBuildDate>Mon, 20 Feb 2017 22:44:42 +0800</lastBuildDate>
     <generator>Jekyll v3.1.6</generator>
+    
+      <item>
+        <title>Android消息分发及多线程切换之Handler、Message的细枝末节（二）</title>
+        <description>&lt;p&gt;之前说了Android消息分发和多线程切换的核心知识点，这次来说一下消息传递的整个过程，好像上一篇内容不看貌似也可以直接看这篇，不过建议还是看一下可以了解的更透彻一点吧~~&lt;/p&gt;
+
+&lt;p&gt;上一篇请看：http://www.jianshu.com/p/e914cda1b5fe&lt;/p&gt;
+
+&lt;p&gt;下面开始本篇的主题吧，我将按照Handler和Message的一般使用流程，跟着代码调用链一步步往下走，所以，看代码吧！&lt;/p&gt;
+
+&lt;p&gt;首先在主线程定义一个handler：&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;	Handler handler = new Handler(){
+            @Override
+            public void handleMessage(Message msg) {
+                super.handleMessage(msg);
+                switch (msg.what){
+                    case TEST:
+                        handleTest(msg);
+                        break;
+                    default:
+                        handleDefault(msg);
+                        break;
+                }
+            }
+       };
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;p&gt;然后在工作线程中使用拿到handler的引用，直接使用：&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;	new Thread(){
+            @Override
+            public void run() {
+                super.run();
+                Message message = Message.obtain();
+                message.what = TEST;
+                Bundle bundle =new Bundle();
+                bundle.putString(&quot;test key&quot;,&quot;test value&quot;);
+                message.setData(bundle);
+       			handler.sendMessage(msg);                
+            }
+        }.start();
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;p&gt;以上即为一个简单使用场景，在工作线程中通过将Message发送到主线程的handler，让handler在主线程中处理UI相关的操作。&lt;/p&gt;
+
+&lt;p&gt;我们从第一段代码开始，先看一下Handler的创建过程。很简单，直接new一个Handler对象，然后实现它的&lt;strong&gt;handleMessage(Message msg)&lt;/strong&gt;方法，但是这个handler可不是随便哪里都能创建的，相信很多同学肯定也碰到过在别的线程中创建handler报错的情况，类似&lt;code class=&quot;highlighter-rouge&quot;&gt;Can&#39;t create handler inside thread that has not called Looper.prepare()&lt;/code&gt;这样的错误提示，为啥呢？&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;	/**
+     * Default constructor associates this handler with the {@link Looper} for the
+     * current thread.
+     *
+     * If this thread does not have a looper, this handler won&#39;t be able to receive messages
+     * so an exception is thrown.
+     */
+    public Handler() {
+        this(null, false);
+    }
+    
+   
+    public Handler(Callback callback, boolean async) {
+        if (FIND_POTENTIAL_LEAKS) {
+            final Class&amp;lt;? extends Handler&amp;gt; klass = getClass();
+            if ((klass.isAnonymousClass() || klass.isMemberClass() || klass.isLocalClass()) &amp;amp;&amp;amp;
+                    (klass.getModifiers() &amp;amp; Modifier.STATIC) == 0) {
+                Log.w(TAG, &quot;The following Handler class should be static or leaks might occur: &quot; +
+                    klass.getCanonicalName());
+            }
+        }
+
+        mLooper = Looper.myLooper();
+        if (mLooper == null) {
+            throw new RuntimeException(
+                &quot;Can&#39;t create handler inside thread that has not called Looper.prepare()&quot;);
+        }
+        mQueue = mLooper.mQueue;
+        mCallback = callback;
+        mAsynchronous = async;
+    }
+    
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+
+&lt;p&gt;最终调用到的构造器中的第一处判断是用来检测内存泄露相关的，我们不管，看&lt;strong&gt;mLooper&lt;/strong&gt;变量的赋值：&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;	/**
+     * Return the Looper object associated with the current thread.  Returns
+     * null if the calling thread is not associated with a Looper.
+     */
+    public static @Nullable Looper myLooper() {
+        return sThreadLocal.get();
+    }
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;p&gt;&lt;strong&gt;sThreadLocal.get()&lt;/strong&gt;方法上一篇我们讲过了，&lt;strong&gt;sThreadLocal&lt;/strong&gt;是一个全局的静态变量，保存着线程对应的&lt;strong&gt;looper&lt;/strong&gt;对象，&lt;strong&gt;get()&lt;/strong&gt;方法用来获取当前线程对应的&lt;strong&gt;looper&lt;/strong&gt;对象，由于我们这个&lt;strong&gt;handler&lt;/strong&gt;是在主线程中创建的，而主线程在&lt;strong&gt;ActivityThread&lt;/strong&gt;的&lt;strong&gt;main()&lt;/strong&gt;方法中已经为我们创建了对应的&lt;strong&gt;looper&lt;/strong&gt;对象，因此我们这里去get的话是能取到值的，所以下面一行的判断不会抛异常。但是一般的工作线程，我们如果没用为它创建&lt;strong&gt;Looper&lt;/strong&gt;对象，它是没有对应的&lt;strong&gt;Looper&lt;/strong&gt;对象保存在&lt;strong&gt;sThreadLocal&lt;/strong&gt;中的，因此&lt;strong&gt;Looper.myLooper()&lt;/strong&gt;就会返回null，接下去就会报错，也就是上面说的在工作线程中创建handler会报错的原因。取到&lt;strong&gt;mLooper&lt;/strong&gt;之后，将&lt;strong&gt;mLooper&lt;/strong&gt;中的保存&lt;strong&gt;Message&lt;/strong&gt;的&lt;strong&gt;MessageQueue&lt;/strong&gt;也取出保存在&lt;strong&gt;handler&lt;/strong&gt;的属性&lt;strong&gt;mQueue&lt;/strong&gt;中，然后将构造器的参数&lt;strong&gt;callback&lt;/strong&gt;和&lt;strong&gt;async&lt;/strong&gt;赋值，我们这里都为null。&lt;/p&gt;
+
+&lt;p&gt;这里大致介绍下&lt;strong&gt;Handler&lt;/strong&gt;的几个属性：&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;
+    &lt;p&gt;&lt;strong&gt;boolean mAsynchronous：&lt;/strong&gt;&lt;/p&gt;
+
+    &lt;p&gt;这个是用来表明处理&lt;strong&gt;Message&lt;/strong&gt;的时候是否需要保证顺序，默认为false，而且我们其实也没办法去将他设置为true，因为这些构造器都是&lt;code class=&quot;highlighter-rouge&quot;&gt;@hide&lt;/code&gt;的，所以我们可以不管它。&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;&lt;strong&gt;Callback mCallback：&lt;/strong&gt;&lt;/p&gt;
+
+    &lt;p&gt;这个是Handler的内部接口&lt;strong&gt;Callback&lt;/strong&gt;类型的一个属性，它就一个方法，也叫
+&lt;strong&gt;handleMessage(Message msg)&lt;/strong&gt;,只能在构造器中传参，如果我们在构造器中给了这个参数，那么发送给这个&lt;strong&gt;handler&lt;/strong&gt;的消息将优先会由这个&lt;strong&gt;mCallback&lt;/strong&gt;来执行，不过目前为止我并不清楚哪些场景适用这种方式，知道的同学欢迎指教一下~&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;&lt;strong&gt;Looper mLooper:&lt;/strong&gt;&lt;/p&gt;
+
+    &lt;p&gt;&lt;strong&gt;handler&lt;/strong&gt;是用来处理&lt;strong&gt;Message&lt;/strong&gt;的，因此我们必须要有&lt;strong&gt;Message&lt;/strong&gt;来源，而&lt;strong&gt;Message&lt;/strong&gt;的来源&lt;strong&gt;MessageQueue&lt;/strong&gt;是在&lt;strong&gt;Looper&lt;/strong&gt;中的，因此&lt;strong&gt;handler&lt;/strong&gt;需要一个&lt;strong&gt;Looper&lt;/strong&gt;属性。一般情况下&lt;strong&gt;mLooper&lt;/strong&gt;即为主线程或者说是创建它的线程所对应的&lt;strong&gt;Looper&lt;/strong&gt;,但是我们也可以传一个Looper对象给它，关于这个可以看看&lt;code class=&quot;highlighter-rouge&quot;&gt;HandlerThread&lt;/code&gt;的相关知识。&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;&lt;strong&gt;MessageQueue mQueue：&lt;/strong&gt;&lt;/p&gt;
+
+    &lt;p&gt;没啥好说的，这个就是&lt;strong&gt;handler&lt;/strong&gt;要处理的消息的来源了,它和&lt;strong&gt;Looper&lt;/strong&gt;中的&lt;strong&gt;mQueue&lt;/strong&gt;指向同一个对象。&lt;/p&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;在看一下&lt;strong&gt;Handler&lt;/strong&gt;的消息分发方法：&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;	/**
+     * Handle system messages here.
+     */
+    public void dispatchMessage(Message msg) {
+        if (msg.callback != null) {
+            handleCallback(msg);
+        } else {
+            if (mCallback != null) {
+                if (mCallback.handleMessage(msg)) {
+                    return;
+                }
+            }
+            handleMessage(msg);
+        }
+    }
+    
+    private static void handleCallback(Message message) {
+        message.callback.run();
+    }
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;p&gt;还记得上一篇中最后线程停留的那个死循环吗，里面有一行代码&lt;code class=&quot;highlighter-rouge&quot;&gt; msg.target.dispatchMessage(msg);&lt;/code&gt;,这里每次取出的&lt;strong&gt;Message&lt;/strong&gt;都会被它对应的&lt;strong&gt;target&lt;/strong&gt;也就是&lt;strong&gt;Handler&lt;/strong&gt;对象分发，也就是上面这段代码。&lt;/p&gt;
+
+&lt;p&gt;可以看到首先会判断&lt;strong&gt;Message&lt;/strong&gt;对象自己的&lt;strong&gt;callback&lt;/strong&gt;是否为空，它是一个&lt;strong&gt;Runnable&lt;/strong&gt;对象，如果不为空直接调用&lt;strong&gt;callback&lt;/strong&gt;的&lt;strong&gt;run()&lt;/strong&gt;方法，否则判断&lt;strong&gt;handler&lt;/strong&gt;的属性&lt;strong&gt;mCallback&lt;/strong&gt;是否为空，属性介绍的时候已经讲过这个了，如果不为空则则调用&lt;strong&gt;mCallback.handleMessage(msg)&lt;/strong&gt;方法，这个方法返回true就直接return，否则调用&lt;strong&gt;handler&lt;/strong&gt;的&lt;strong&gt;handlerMessage(msg)&lt;/strong&gt;方法，也就是我们要继承&lt;strong&gt;Handler&lt;/strong&gt;要实现的方法，这个是不是有点类似于Android系统的屏幕事件传递机制呢？哈哈~&lt;/p&gt;
+
+&lt;p&gt;话说第一篇里有个坑还没填，就是如何在工作线程创建使用&lt;strong&gt;Handler&lt;/strong&gt;，不过相信看到这里的同学应该已经心里有底了吧，参考上一篇中&lt;strong&gt;ActivityThread&lt;/strong&gt;中的&lt;strong&gt;main()&lt;/strong&gt;方法，很容易创建自己的无线循环工作线程了，下面直接给出代码：&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;	new Thread(){
+            Handler handler;
+            @Override
+            public void run() {
+                super.run();
+                Looper.prepare();
+                 handler = new Handler(){
+                    @Override
+                    public void handleMessage(Message msg) {
+                        super.handleMessage(msg);
+                        //handler the message
+                    }
+                };
+                Looper.loop();
+            }
+        };
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;p&gt;以上，即在工作线程中创建了&lt;strong&gt;handler&lt;/strong&gt;,然后将&lt;strong&gt;handler&lt;/strong&gt;的引用丢给别的线程，别的线程就可以通过&lt;strong&gt;handler&lt;/strong&gt;发消息到这个工作线程来处理。&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Handler&lt;/strong&gt;对于消息的分发和处理的逻辑总算说完了，接下去看看&lt;strong&gt;Message&lt;/strong&gt;是如何被送到&lt;strong&gt;Handler&lt;/strong&gt;的。
+先看下&lt;strong&gt;Message&lt;/strong&gt;的基本信息吧：&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;
+    &lt;p&gt;&lt;strong&gt;int what:&lt;/strong&gt;&lt;/p&gt;
+
+    &lt;p&gt;表明消息的类别，&lt;strong&gt;handler&lt;/strong&gt;根据这个字段来判断如何处理这个&lt;strong&gt;Message&lt;/strong&gt;&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;&lt;strong&gt;Bundle data：&lt;/strong&gt;&lt;/p&gt;
+
+    &lt;p&gt;用于存放数据，可以存放一些相对复杂的内容，因此开销稍微大一点&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;&lt;strong&gt;int arg1,arg2:&lt;/strong&gt;&lt;/p&gt;
+
+    &lt;p&gt;两个基本类型的参数，用于传递一些简单的&lt;strong&gt;Message&lt;/strong&gt;信息，可以的话尽量用这两个参数来传递信息，相对于&lt;strong&gt;Bundle data&lt;/strong&gt;它性能消耗会小很多&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;&lt;strong&gt;int flags:&lt;/strong&gt;&lt;/p&gt;
+
+    &lt;p&gt;当前&lt;strong&gt;Message&lt;/strong&gt;状态的一个标志位，类似异步，使用中这些状态&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;&lt;strong&gt;long when：&lt;/strong&gt;&lt;/p&gt;
+
+    &lt;p&gt;表示这个&lt;strong&gt;Message&lt;/strong&gt;应该在何时被执行，&lt;strong&gt;MessageQueue&lt;/strong&gt;中&lt;strong&gt;Message&lt;/strong&gt;就是以这个字段为来排序的&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;&lt;strong&gt;Handler target：&lt;/strong&gt;&lt;/p&gt;
+
+    &lt;p&gt;&lt;strong&gt;Message&lt;/strong&gt;将要被发送的对象，也就是由哪个target来接受处理这个&lt;strong&gt;Message&lt;/strong&gt;，&lt;strong&gt;这个字段必须不为null&lt;/strong&gt;&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;&lt;strong&gt;Runnable callback：&lt;/strong&gt;&lt;/p&gt;
+
+    &lt;p&gt;这个讲&lt;strong&gt;handler&lt;/strong&gt;的时候说到过了，如果有这个字段，那么这个&lt;strong&gt;Message&lt;/strong&gt;将由此&lt;strong&gt;callback&lt;/strong&gt;来处理，注意下，它是一个&lt;strong&gt;Runnable&lt;/strong&gt;&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;&lt;strong&gt;Message next:&lt;/strong&gt;&lt;/p&gt;
+
+    &lt;p&gt;由于&lt;strong&gt;Message&lt;/strong&gt;在消息池中是链表的形式维护的，所以这个字段表示下一个&lt;strong&gt;Message&lt;/strong&gt;对象&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;&lt;strong&gt;static Message sPool：&lt;/strong&gt;&lt;/p&gt;
+
+    &lt;p&gt;这个是静态变量，指向当前消息池的第一个空闲&lt;strong&gt;Message&lt;/strong&gt;&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;&lt;strong&gt;static int sPoolSize:&lt;/strong&gt;&lt;/p&gt;
+
+    &lt;p&gt;消息池的大小，也就是剩余空闲&lt;strong&gt;Message&lt;/strong&gt;的数量&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;&lt;strong&gt;static final int MAX_POOL_SIZE = 50;&lt;/strong&gt;&lt;/p&gt;
+
+    &lt;p&gt;不用解释了吧？&lt;/p&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;再贴一下例子中的第二段代码：&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;	new Thread(){
+            @Override
+            public void run() {
+                super.run();
+                Message message = Message.obtain();
+                message.what = TEST;
+                Bundle bundle =new Bundle();
+                bundle.putString(&quot;test key&quot;,&quot;test value&quot;);
+                message.setData(bundle);
+       			handler.sendMessage(msg);                
+            }
+        }.start();
+        
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+
+&lt;p&gt;&lt;strong&gt;Message&lt;/strong&gt;的获取方式特别多，除了自己new一个外，其他基本都大同小异，最终都从&lt;strong&gt;Message&lt;/strong&gt;消息池取一个空闲的&lt;strong&gt;Message&lt;/strong&gt;使用，因为Android系统中到处都用到了&lt;strong&gt;Message&lt;/strong&gt;，因此会需要大量的&lt;strong&gt;Message&lt;/strong&gt;对象，使用消息池的方式可以减少频繁的创建销毁对象，大大的提高性能。我这里直接用最基本的方式获取，&lt;code class=&quot;highlighter-rouge&quot;&gt;Message.obtain();&lt;/code&gt;,看源码吧：&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;	/**
+     * Return a new Message instance from the global pool. Allows us to
+     * avoid allocating new objects in many cases.
+     */
+    public static Message obtain() {
+        synchronized (sPoolSync) {
+            if (sPool != null) {
+                Message m = sPool;
+                sPool = m.next;
+                m.next = null;
+                m.flags = 0; // clear in-use flag
+                sPoolSize--;
+                return m;
+            }
+        }
+        return new Message();
+    }
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;p&gt;对着上面的字段介绍，很容易看出这个方法的作用就是将消息池的第一个空闲&lt;strong&gt;Message&lt;/strong&gt;拿出来，然后消息池的数量减1，当然如果消息池已经没用空闲&lt;strong&gt;Message&lt;/strong&gt;了，那就new一个返回了。&lt;/p&gt;
+
+&lt;p&gt;例子中只用到了&lt;strong&gt;what&lt;/strong&gt;和&lt;strong&gt;data&lt;/strong&gt;字段，简单给它们赋了值，然后就调用&lt;strong&gt;handler.sendMessage(msg); **将消息发送给了我们在主线程创建的&lt;/strong&gt;handler**了。&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;	public final boolean sendMessage(Message msg)
+    {
+        return sendMessageDelayed(msg, 0);
+    }
+    
+    public final boolean sendMessageDelayed(Message msg, long delayMillis)
+    {
+        if (delayMillis &amp;lt; 0) {
+            delayMillis = 0;
+        }
+        return sendMessageAtTime(msg, SystemClock.uptimeMillis() + delayMillis);
+    }
+    
+    /**
+     * Enqueue a message into the message queue after all pending messages
+     * before the absolute time (in milliseconds) &amp;lt;var&amp;gt;uptimeMillis&amp;lt;/var&amp;gt;.
+     * &amp;lt;b&amp;gt;The time-base is {@link android.os.SystemClock#uptimeMillis}.&amp;lt;/b&amp;gt;
+     * Time spent in deep sleep will add an additional delay to execution.
+     * You will receive it in {@link #handleMessage}, in the thread attached
+     * to this handler.
+     * 
+     * @param uptimeMillis The absolute time at which the message should be
+     *         delivered, using the
+     *         {@link android.os.SystemClock#uptimeMillis} time-base.
+     *         
+     * @return Returns true if the message was successfully placed in to the 
+     *         message queue.  Returns false on failure, usually because the
+     *         looper processing the message queue is exiting.  Note that a
+     *         result of true does not mean the message will be processed -- if
+     *         the looper is quit before the delivery time of the message
+     *         occurs then the message will be dropped.
+     */
+    public boolean sendMessageAtTime(Message msg, long uptimeMillis) {
+        MessageQueue queue = mQueue;
+        if (queue == null) {
+            RuntimeException e = new RuntimeException(
+                    this + &quot; sendMessageAtTime() called with no mQueue&quot;);
+            Log.w(&quot;Looper&quot;, e.getMessage(), e);
+            return false;
+        }
+        return enqueueMessage(queue, msg, uptimeMillis);
+    }
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;p&gt;前面两个方法的注释我没贴，因为跟第三个方法内容差不多，而且最终也都是调用第三个方法，所以看了第三个方法的注释和方法体应该很容易明白前两个方法的作用。
+第一个方法是直接将消息发送handler处理，所以它使用0毫秒的延时作为参数调用第二个方法，第二个方法判断如果延时小于0则默认给0，因为小于0的延迟也就意味着比当前时间早，当然不可能回到过去处理这个消息了，然后它又将当前时间加上延时，调用了第三个方法，这样第三个方法拿到的时间就是一个绝对值了，然后我们看到了&lt;strong&gt;mQueue&lt;/strong&gt;，这个创建&lt;strong&gt;handler&lt;/strong&gt;的时候我们就看到了，指向主线程对应的&lt;strong&gt;Looper&lt;/strong&gt;中的消息队列，最后return了一个方法调用，看名字终于要加入消息队列了。&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt; 	private boolean enqueueMessage(MessageQueue queue, Message msg, long uptimeMillis) {
+        msg.target = this;
+        if (mAsynchronous) {
+            msg.setAsynchronous(true);
+        }
+        return queue.enqueueMessage(msg, uptimeMillis);
+    }
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;p&gt;等等，原来我们刚才发送的&lt;strong&gt;Message&lt;/strong&gt;还没对象呢，那啥，我不是说那个对象，正经点儿！所以加入消息队列前先给它一个对象吧！然后如果我们的&lt;strong&gt;handler&lt;/strong&gt;是异步的将&lt;strong&gt;msg&lt;/strong&gt;的&lt;strong&gt;flag&lt;/strong&gt;标志位加上成异步,这下&lt;strong&gt;msg&lt;/strong&gt;开开心心地领着对象去排队了~&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;	//MessageQueue
+	boolean enqueueMessage(Message msg, long when) {
+        if (msg.target == null) {
+            throw new IllegalArgumentException(&quot;Message must have a target.&quot;);
+        }
+        if (msg.isInUse()) {
+            throw new IllegalStateException(msg + &quot; This message is already in use.&quot;);
+        }
+
+        synchronized (this) {
+            if (mQuitting) {
+                IllegalStateException e = new IllegalStateException(
+                        msg.target + &quot; sending message to a Handler on a dead thread&quot;);
+                Log.w(TAG, e.getMessage(), e);
+                msg.recycle();
+                return false;
+            }
+
+            msg.markInUse();
+            msg.when = when;
+            Message p = mMessages;
+            boolean needWake;
+            if (p == null || when == 0 || when &amp;lt; p.when) {
+                // New head, wake up the event queue if blocked.
+                msg.next = p;
+                mMessages = msg;
+                needWake = mBlocked;
+            } else {
+                // Inserted within the middle of the queue.  Usually we don&#39;t have to wake
+                // up the event queue unless there is a barrier at the head of the queue
+                // and the message is the earliest asynchronous message in the queue.
+                needWake = mBlocked &amp;amp;&amp;amp; p.target == null &amp;amp;&amp;amp; msg.isAsynchronous();
+                Message prev;
+                for (;;) {
+                    prev = p;
+                    p = p.next;
+                    if (p == null || when &amp;lt; p.when) {
+                        break;
+                    }
+                    if (needWake &amp;amp;&amp;amp; p.isAsynchronous()) {
+                        needWake = false;
+                    }
+                }
+                msg.next = p; // invariant: p == prev.next
+                prev.next = msg;
+            }
+
+            // We can assume mPtr != 0 because mQuitting is false.
+            if (needWake) {
+                nativeWake(mPtr);
+            }
+        }
+        return true;
+    }
+
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;p&gt;首先判断&lt;strong&gt;Message&lt;/strong&gt;的对象&lt;strong&gt;target&lt;/strong&gt;是否为空(所以说&lt;strong&gt;Message&lt;/strong&gt;不能没有对象&lt;strong&gt;target&lt;/strong&gt;),然后判断&lt;strong&gt;Message&lt;/strong&gt;是否正在使用中,在经历的前面的入队步骤后，我们这个&lt;strong&gt;Message&lt;/strong&gt;都满足了条件，然后进入一个同步块，首先判断是否正在退出中，因为主线程是不可退出的，所以我们也不用考虑，不过里面方法也是一目了然，回收&lt;strong&gt;Message&lt;/strong&gt;,返回&lt;strong&gt;false&lt;/strong&gt;通知上层入队失败。我们继续看满足条件的情况下，将&lt;strong&gt;Message&lt;/strong&gt;标记为在使用中(&lt;code class=&quot;highlighter-rouge&quot;&gt;msg.markInUse()&lt;/code&gt;),给&lt;strong&gt;when&lt;/strong&gt;字段赋值，然后创建一个新对象指向消息队列中的第一个消息&lt;strong&gt;mMessage&lt;/strong&gt;，定义了一个布尔类型的字段&lt;strong&gt;needWake&lt;/strong&gt;,表示是否需要唤醒当前线程，因为没有消息需要处理的时候我们的Looper线程是阻塞的。当消息队列中的第一个消息为&lt;strong&gt;null&lt;/strong&gt;或者我们本次需要入队的消息对象&lt;strong&gt;msg&lt;/strong&gt;的&lt;strong&gt;when&lt;/strong&gt;为0或者小于原来的队首消息的&lt;strong&gt;when&lt;/strong&gt;值，则将&lt;strong&gt;msg&lt;/strong&gt;插入到消息队列的队首，也就是&lt;strong&gt;mMessage&lt;/strong&gt;之前，然后&lt;strong&gt;mMessage&lt;/strong&gt;重新指向新的队首，也就是&lt;strong&gt;msg&lt;/strong&gt;；当那些条件不满足的时候，则需要将&lt;strong&gt;msg&lt;/strong&gt;插入到消息队列中而不是队首，插入的方式也很简单除暴，遍历原队列的消息，依次比对&lt;strong&gt;when&lt;/strong&gt;的值，直到队尾或者找到下一个消息的&lt;strong&gt;when&lt;/strong&gt;值比&lt;strong&gt;msg&lt;/strong&gt;的&lt;strong&gt;when&lt;/strong&gt;值大的时候跳出循环，将&lt;strong&gt;msg&lt;/strong&gt;插到其中，这个入队的过程也就完成了，都是一些链表的基本操作。之前也有说到，因为每次有消息进入&lt;strong&gt;mQueue&lt;/strong&gt;，我们都是以这种方式来插入的，所以有序的消息队列就是简单以消息的&lt;strong&gt;when&lt;/strong&gt;的大小来排序的。消息插入到消息队列完成后，判断是否需要唤醒主线程，需要则调用native方法&lt;strong&gt;nativeWake()&lt;/strong&gt;唤醒主线程来处理消息（&lt;code class=&quot;highlighter-rouge&quot;&gt; Message msg = queue.next();//Looper.loop()方法中被唤醒后取出消息并分发处理&lt;/code&gt;）。最后返回&lt;strong&gt;true&lt;/strong&gt;表明消息插入队列成功。这样&lt;strong&gt;Message&lt;/strong&gt;入队的过程就算完成了，是不是挺简单的~&lt;/p&gt;
+
+&lt;p&gt;以上，就是一个完整的消息传递和分发过程。实际使用中，我们用到更多的可能是&lt;code class=&quot;highlighter-rouge&quot;&gt;handler.post(runnable);&lt;/code&gt;,&lt;code class=&quot;highlighter-rouge&quot;&gt;handler.postDelayed(runnable,delayMillis);&lt;/code&gt;,&lt;code class=&quot;highlighter-rouge&quot;&gt;view.postDelayed(runnable,delayMillis);&lt;/code&gt;之类的方法，这些方法看上去好像没有&lt;strong&gt;Message&lt;/strong&gt;什么事，但是点进去一看就发现，这个被post的&lt;strong&gt;runnable&lt;/strong&gt;就是&lt;strong&gt;Message&lt;/strong&gt;的&lt;strong&gt;callback&lt;/strong&gt;，简单封装一下就又走上了刚刚讲完的消息传递路线，还没反应过来的回头看看&lt;strong&gt;handler&lt;/strong&gt;的&lt;strong&gt;dispatchMessage(Message msg)&lt;/strong&gt;方法，因此这些方式我们都不用重写&lt;strong&gt;handleMessage(Message msg)&lt;/strong&gt;方法,使用起来非常方便。&lt;strong&gt;&lt;em&gt;友情提示：非常方便的同时也非常容易导致内存泄露、空指针和其他一些状态紊乱的错误（别问我怎么知道的，死过太多脑细胞😭），慎用！！！&lt;/em&gt;&lt;/strong&gt;&lt;/p&gt;
+
+</description>
+        <pubDate>Mon, 06 Feb 2017 23:10:00 +0800</pubDate>
+        <link>http://yourdomain.com/blog/2017/02/06/Android%E6%B6%88%E6%81%AF%E5%88%86%E5%8F%91%E5%8F%8A%E5%A4%9A%E7%BA%BF%E7%A8%8B%E5%88%87%E6%8D%A2%E4%B9%8BHandler-Message%E7%9A%84%E7%BB%86%E6%9E%9D%E6%9C%AB%E8%8A%82-%E4%BA%8C.html</link>
+        <guid isPermaLink="true">http://yourdomain.com/blog/2017/02/06/Android%E6%B6%88%E6%81%AF%E5%88%86%E5%8F%91%E5%8F%8A%E5%A4%9A%E7%BA%BF%E7%A8%8B%E5%88%87%E6%8D%A2%E4%B9%8BHandler-Message%E7%9A%84%E7%BB%86%E6%9E%9D%E6%9C%AB%E8%8A%82-%E4%BA%8C.html</guid>
+        
+        
+        <category>Blog</category>
+        
+      </item>
+    
+      <item>
+        <title>Android消息分发及多线程切换之Handler、Message的细枝末节（一）</title>
+        <description>&lt;p&gt;今天来扒一扒Android的消息分发机制和多线程切换过程，也就是我们常常看到用的Handler，Message（还有两个不太看得到的MessageQueue和Looper）它们的原理。额，当然有人会说还有AsyncTask这玩意儿，怎么说呢，反正我是基本没用过AsyncTask，也没见谁喜欢用这个，总感觉使用起来没Handler+Message方便，然而我用的更多的是Handler+Runnable，当然实际上Runnable还是被包装成了Message。&lt;/p&gt;
+
+&lt;p&gt;先简单介绍一下这几个类吧：&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;Handler:&lt;/strong&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+ 	处理者，一般在主线程创建（在工作线程也可以创建，这个下一篇会详细说到），处理各种线程发送过来的* Message，根据Message内容在主线程做不同的处理。
+&lt;ul&gt;
+  &lt;li&gt;
+    &lt;p&gt;&lt;strong&gt;Message:&lt;/strong&gt;&lt;/p&gt;
+
+    &lt;p&gt;消息体，在多线程中担任一个内容载体的角色，包含了消息的类型，参数，数据等内容，其中还包括一个重要的对象，那就是它将会被发送给那个handler。&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;&lt;strong&gt;MessageQueue：&lt;/strong&gt;&lt;/p&gt;
+
+    &lt;p&gt;消息队列，所有发送给handler处理的消息都会保存在消息队列中，其内部使用链表的形式维护这些message。&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;&lt;strong&gt;Looper：&lt;/strong&gt;&lt;/p&gt;
+
+    &lt;p&gt;这个怎么说呢，它的英文解释为一个打环的装置，我也不知道该怎么翻译，它的作用是可以让线程一直活着，而不是执行完一个功能代码后就死掉了，每个Looper的实例有一个MessageQueue和当前线程对象，正是这两个类让线程可以一直活着，也就是Looper打环的装置的意思吧。我们的主线程就是因为它才可以一直执行而不退出。&lt;/p&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;上面说到Looper使我们的主线程可以一直运行，究竟是咋回事，上代码！！！&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt; public static void main(String[] args) {
+        ······
+        Looper.prepareMainLooper();
+
+        ActivityThread thread = new ActivityThread();
+        thread.attach(false);
+
+        if (sMainThreadHandler == null) {
+            sMainThreadHandler = thread.getHandler();
+        }
+		······
+        Looper.loop();
+
+        throw new RuntimeException(&quot;Main thread loop unexpectedly exited&quot;);
+    }
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;p&gt;没错，就是我们的主线程初始化的地方，也就是应用程序启动的入口。我们的应用对于Android系统而言，说白了也就是一段程序代码，那么程序启动的时候当然得从启动方法开始了，它就是&lt;strong&gt;ActivityThread&lt;/strong&gt;中大名鼎鼎的&lt;strong&gt;main()&lt;/strong&gt;方法，是不是想起来java中的&lt;strong&gt;main()&lt;/strong&gt;方法？我们来看一下这里到底做了哪些事。首先就是调用了&lt;strong&gt;Looper&lt;/strong&gt;的静态方法&lt;strong&gt;preoareMainLooper()&lt;/strong&gt;:&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;	/**
+     * Initialize the current thread as a looper, marking it as an
+     * application&#39;s main looper. The main looper for your application
+     * is created by the Android environment, so you should never need
+     * to call this function yourself.  See also: {@link #prepare()}
+     */
+    public static void prepareMainLooper() {
+        prepare(false);
+        synchronized (Looper.class) {
+            if (sMainLooper != null) {
+                throw new IllegalStateException(&quot;The main Looper has already been prepared.&quot;);
+            }
+            sMainLooper = myLooper();
+        }
+    }
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;p&gt;这个是源码原封不动的贴上来的，包括注释，可以看到这个方法应该由系统调用，它根据当前线程初始化一个&lt;strong&gt;Looper&lt;/strong&gt;对象，并且是应用的”main looper”，也就是方法名所表现的，接着看方法里的第一行调用。&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;	private static void prepare(boolean quitAllowed) {
+        if (sThreadLocal.get() != null) {
+            throw new RuntimeException(&quot;Only one Looper may be created per thread&quot;);
+        }
+        sThreadLocal.set(new Looper(quitAllowed));
+    }
+    
+    private Looper(boolean quitAllowed) {
+        mQueue = new MessageQueue(quitAllowed);
+        mThread = Thread.currentThread();
+    }
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+
+&lt;p&gt;这里有个&lt;strong&gt;sThreadLocal&lt;/strong&gt;，它是一个静态属性：**static final ThreadLocal&lt;Looper&gt; sThreadLocal = new ThreadLocal&lt;Looper&gt;();**，也就是全局就一个，每个线程最多对应一个**Looper**对象，如果有，**Looper**对象都会保存在**sThreadLocal**中，我们简单的把它理解为一个Map就行，key为当前的线程，value为一个**Looper**实例，因为线程（也就是key）在方法调用的时候内部可以取到，所以对它进行get，set操作的时候不需要传key，直接传value就行，那么这个方法就很好理解了，如果之前调用过这个方法，**sThreadLocal.get()**则不为null,直接抛异常（也就说明了一个线程最多只能对应一个**Looper**对象），否则new一个**Looper**对象存到**sThreadLocal**中，**Looper**对象初始化的同时也初始化了一个**MessageQueue**，并且持有了当前线程的引用。&lt;/Looper&gt;&lt;/Looper&gt;&lt;/p&gt;
+
+&lt;p&gt;好，继续看&lt;strong&gt;prepareMainLooper&lt;/strong&gt;方法，判断&lt;strong&gt;sMainLooper&lt;/strong&gt;是否为null，第一次调用当然为null，所以&lt;strong&gt;sMainLooper = myLooper();&lt;/strong&gt;&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;	/**
+     * Return the Looper object associated with the current thread.  Returns
+     * null if the calling thread is not associated with a Looper.
+     */
+    public static @Nullable Looper myLooper() {
+        return sThreadLocal.get();
+    }
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;p&gt;很简单，直接调用&lt;strong&gt;sThreadLocal.get()&lt;/strong&gt;方法，很眼熟是吧，我们刚刚调用过它的&lt;strong&gt;set()&lt;/strong&gt;方法，这个时候还在刚才的线程中呢，所以这里取出来的就是我们刚刚放进去的&lt;strong&gt;new Looper()&lt;/strong&gt;，可以稍微看一下这个过程中有个参数就&lt;strong&gt;quitAllowed&lt;/strong&gt;，最终被传到了&lt;strong&gt;MessageQueue&lt;/strong&gt;的构造器中，应该可以猜到它表示这个&lt;strong&gt;MessageQueue&lt;/strong&gt;是否可以被退出或者说这个线程是否能被结束掉，当然因为我们的线程是主线程，所以传&lt;strong&gt;false&lt;/strong&gt;。目前为止我们已经完成了&lt;strong&gt;prepareMainLooper()&lt;/strong&gt;方法，它所做的事其实很简单，就是将我们的线程作为key在&lt;strong&gt;sThreadLocal&lt;/strong&gt;中保存了一个不可退出的&lt;strong&gt;Looper&lt;/strong&gt;对象，同时赋值给&lt;strong&gt;sMainLooper&lt;/strong&gt;，为什么还要单独定义一个&lt;strong&gt;sMainLooper&lt;/strong&gt;呢？首先&lt;strong&gt;sMainLooper&lt;/strong&gt;是一个静态属性，且有一个&lt;strong&gt;getMainLooper()&lt;/strong&gt;静态方法直接返回&lt;strong&gt;sMainLooper&lt;/strong&gt;,所以我猜测是因为主线程的&lt;strong&gt;Looper&lt;/strong&gt;对象获取比较频繁，所以单独作为一个属性直接读取，省的每次从&lt;strong&gt;sThreadLocal&lt;/strong&gt;中去取，以此减小开销。&lt;/p&gt;
+
+&lt;p&gt;下面放一张图作为prepareMainLooper的总结吧，对着图看应该清晰很多：
+&lt;img src=&quot;prepareMainLooper.001.jpeg&quot; alt=&quot;image&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;回头继续看&lt;strong&gt;main()&lt;/strong&gt;方法，接下去new了一个ActivityThread实例&lt;strong&gt;thread&lt;/strong&gt;，并且调用了&lt;strong&gt;attach()&lt;/strong&gt;方法，然后将&lt;strong&gt;thread.getHandler()&lt;/strong&gt;返回给&lt;strong&gt;sMainThreadHandler&lt;/strong&gt;，这几行代码主要是初始化了我们的应用进程和Android系统的通信基础，也就是Binder组件，使得我们的应用进程和Android系统能够通信，这里我们只要知道个大概，就是Android系统会发送消息给我们的应用的&lt;strong&gt;ActivityThread&lt;/strong&gt;(好吧，其实是它的一个内部类&lt;strong&gt;ApplicationThread&lt;/strong&gt;)，然后由&lt;strong&gt;ActivityThread&lt;/strong&gt;包装成&lt;strong&gt;Message&lt;/strong&gt;放入&lt;strong&gt;sMainLooper&lt;/strong&gt;的&lt;strong&gt;MessageQueue&lt;/strong&gt;中等待执行。如何执行，请往下看……&lt;/p&gt;
+
+&lt;p&gt;再接下去是&lt;strong&gt;Looper.loop()&lt;/strong&gt;方法&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;	/**
+     * Run the message queue in this thread. Be sure to call
+     * {@link #quit()} to end the loop.
+     */
+    public static void loop() {
+        final Looper me = myLooper();
+        if (me == null) {
+            throw new RuntimeException(&quot;No Looper; Looper.prepare() wasn&#39;t called on this thread.&quot;);
+        }
+        final MessageQueue queue = me.mQueue;
+		······
+        for (;;) {
+            Message msg = queue.next(); // might block
+            if (msg == null) {
+                // No message indicates that the message queue is quitting.
+                return;
+            }
+
+          	······
+
+            msg.target.dispatchMessage(msg);
+
+            ······
+
+            msg.recycleUnchecked();
+        }
+    }
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;p&gt;可以看到以上代码逻辑也十分简单，获取当前线程的&lt;strong&gt;Looper&lt;/strong&gt;对象，进而获取&lt;strong&gt;Looper&lt;/strong&gt;对象中的&lt;strong&gt;MessageQueue&lt;/strong&gt;保存为&lt;strong&gt;queue&lt;/strong&gt;，然后进入死循环，每次都从&lt;strong&gt;queue&lt;/strong&gt;中取下一个&lt;strong&gt;Message&lt;/strong&gt;，得到&lt;strong&gt;Message&lt;/strong&gt;后直接调用&lt;strong&gt;Message&lt;/strong&gt;对象中保存的目标&lt;strong&gt;handler&lt;/strong&gt;的&lt;strong&gt;dispatchMessage（）&lt;/strong&gt;方法，然后回收&lt;strong&gt;Message&lt;/strong&gt;进入下一次循环。至此，我们的主线程才成为了真正意义上的主线程。上面说到Android系统会给我们应用发消息，然后消息被包装成&lt;strong&gt;Message&lt;/strong&gt;保存在&lt;strong&gt;MessageQueue&lt;/strong&gt;中，而在&lt;strong&gt;loop()&lt;/strong&gt;方法中我们又去取下一个&lt;strong&gt;Message&lt;/strong&gt;，是不是发现了什么？不错，我们应用中的各种系统方法的调用其实都是都将Android系统发送的消息包装成&lt;strong&gt;Message&lt;/strong&gt;保存到我们的应用主线程绑定的&lt;strong&gt;sMainLooper&lt;/strong&gt;中的&lt;strong&gt;MessageQueue&lt;/strong&gt;中，然后由这个死循环从&lt;strong&gt;MessageQueue&lt;/strong&gt;中取依次出&lt;strong&gt;Message&lt;/strong&gt;消息进而执行对应的方法，这样一个完整的消息传递过程就打通了！&lt;/p&gt;
+
+&lt;p&gt;老样子，看图：
+&lt;img src=&quot;loop.001.jpeg&quot; alt=&quot;image&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;我个人认为以上内容已经是&lt;strong&gt;Handler&lt;/strong&gt;和&lt;strong&gt;Message&lt;/strong&gt;完成多线程切换和消息传递的核心内容了，主要也就是&lt;strong&gt;Looper&lt;/strong&gt;类的用处和用法，看懂了这些内容再看整个流程会很轻松，所以如果还没理解的话建议再看几遍，或者直接去看看Looper的源码更好。&lt;/p&gt;
+
+&lt;p&gt;其实还一个比较关键的步骤：如何从&lt;strong&gt;MessageQueue&lt;/strong&gt;取&lt;strong&gt;Message&lt;/strong&gt;，不过个人感觉就算这个过程对于理解整个消息传递机制影响不大，只要知道&lt;strong&gt;MessageQueue&lt;/strong&gt;以链表的形式维护这每个进入队列的&lt;strong&gt;Message&lt;/strong&gt;就行了。有兴趣的小伙伴也可以看看源码，我就在这里贴一下&lt;strong&gt;MessageQueue.next()&lt;/strong&gt;方法的源码吧：&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;	Message next() {
+        // Return here if the message loop has already quit and been disposed.
+        // This can happen if the application tries to restart a looper after quit
+        // which is not supported.
+        final long ptr = mPtr;
+        if (ptr == 0) {
+            return null;
+        }
+
+        int pendingIdleHandlerCount = -1; // -1 only during first iteration
+        int nextPollTimeoutMillis = 0;
+        for (;;) {
+            if (nextPollTimeoutMillis != 0) {
+                Binder.flushPendingCommands();
+            }
+
+            nativePollOnce(ptr, nextPollTimeoutMillis);
+
+            synchronized (this) {
+                // Try to retrieve the next message.  Return if found.
+                final long now = SystemClock.uptimeMillis();
+                Message prevMsg = null;
+                Message msg = mMessages;
+                if (msg != null &amp;amp;&amp;amp; msg.target == null) {
+                    // Stalled by a barrier.  Find the next asynchronous message in the queue.
+                    do {
+                        prevMsg = msg;
+                        msg = msg.next;
+                    } while (msg != null &amp;amp;&amp;amp; !msg.isAsynchronous());
+                }
+                if (msg != null) {
+                    if (now &amp;lt; msg.when) {
+                        // Next message is not ready.  Set a timeout to wake up when it is ready.
+                        nextPollTimeoutMillis = (int) Math.min(msg.when - now, Integer.MAX_VALUE);
+                    } else {
+                        // Got a message.
+                        mBlocked = false;
+                        if (prevMsg != null) {
+                            prevMsg.next = msg.next;
+                        } else {
+                            mMessages = msg.next;
+                        }
+                        msg.next = null;
+                        if (DEBUG) Log.v(TAG, &quot;Returning message: &quot; + msg);
+                        msg.markInUse();
+                        return msg;
+                    }
+                } else {
+                    // No more messages.
+                    nextPollTimeoutMillis = -1;
+                }
+
+                // Process the quit message now that all pending messages have been handled.
+                if (mQuitting) {
+                    dispose();
+                    return null;
+                }
+
+                // If first time idle, then get the number of idlers to run.
+                // Idle handles only run if the queue is empty or if the first message
+                // in the queue (possibly a barrier) is due to be handled in the future.
+                if (pendingIdleHandlerCount &amp;lt; 0
+                        &amp;amp;&amp;amp; (mMessages == null || now &amp;lt; mMessages.when)) {
+                    pendingIdleHandlerCount = mIdleHandlers.size();
+                }
+                if (pendingIdleHandlerCount &amp;lt;= 0) {
+                    // No idle handlers to run.  Loop and wait some more.
+                    mBlocked = true;
+                    continue;
+                }
+
+                if (mPendingIdleHandlers == null) {
+                    mPendingIdleHandlers = new IdleHandler[Math.max(pendingIdleHandlerCount, 4)];
+                }
+                mPendingIdleHandlers = mIdleHandlers.toArray(mPendingIdleHandlers);
+            }
+
+            // Run the idle handlers.
+            // We only ever reach this code block during the first iteration.
+            for (int i = 0; i &amp;lt; pendingIdleHandlerCount; i++) {
+                final IdleHandler idler = mPendingIdleHandlers[i];
+                mPendingIdleHandlers[i] = null; // release the reference to the handler
+
+                boolean keep = false;
+                try {
+                    keep = idler.queueIdle();
+                } catch (Throwable t) {
+                    Log.wtf(TAG, &quot;IdleHandler threw exception&quot;, t);
+                }
+
+                if (!keep) {
+                    synchronized (this) {
+                        mIdleHandlers.remove(idler);
+                    }
+                }
+            }
+
+            // Reset the idle handler count to 0 so we do not run them again.
+            pendingIdleHandlerCount = 0;
+
+            // While calling an idle handler, a new message could have been delivered
+            // so go back and look again for a pending message without waiting.
+            nextPollTimeoutMillis = 0;
+        }
+    }
+
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+&lt;p&gt;本来只想写一篇的，不过感觉好像有点长了，这样的话就再写一篇吧，这篇就当做是理论知识的一个补充，接下去讲讲顺着实际应用过程的线索，一步步是如何将消息放入&lt;strong&gt;MessageQueue&lt;/strong&gt;到最后执行的~&lt;/p&gt;
+</description>
+        <pubDate>Wed, 25 Jan 2017 23:10:00 +0800</pubDate>
+        <link>http://yourdomain.com/blog/2017/01/25/Android%E6%B6%88%E6%81%AF%E5%88%86%E5%8F%91%E5%8F%8A%E5%A4%9A%E7%BA%BF%E7%A8%8B%E5%88%87%E6%8D%A2%E4%B9%8BHandler-Message%E7%9A%84%E7%BB%86%E6%9E%9D%E6%9C%AB%E8%8A%82-%E4%B8%80.html</link>
+        <guid isPermaLink="true">http://yourdomain.com/blog/2017/01/25/Android%E6%B6%88%E6%81%AF%E5%88%86%E5%8F%91%E5%8F%8A%E5%A4%9A%E7%BA%BF%E7%A8%8B%E5%88%87%E6%8D%A2%E4%B9%8BHandler-Message%E7%9A%84%E7%BB%86%E6%9E%9D%E6%9C%AB%E8%8A%82-%E4%B8%80.html</guid>
+        
+        
+        <category>Blog</category>
+        
+      </item>
     
       <item>
         <title>第一篇博客</title>
