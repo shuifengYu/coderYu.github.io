@@ -19,3 +19,5 @@ github_username:  coderYu
 
 # Build settings
 markdown: kramdown
+
+theme: jekyll-theme-minimal
