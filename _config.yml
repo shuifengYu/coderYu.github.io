@@ -8,11 +8,11 @@
 # Site settings
 title: coder_yu's BLOG
 email: coder_yu@126.com
-description: 这里的文章排版比较丑，大家将就着看吧，有时间了在慢慢整理，简书上的排版好很多<http://www.jianshu.com/u/f8b015eee27a>~ 欢迎指出文章中的错误或者不足之处. # this means to ignore newlines until "baseurl:"
+description: 这里的文章排版比较丑，有时间了在慢慢整理，简书上的排版会好很多~~欢迎指出文章中的错误或者不足之处. # this means to ignore newlines until "baseurl:"
 #  Write an awesome description for your new site here. You can edit this
  # line in _config.yml. It will appear in your document head meta (for
   #Google search results) and in your feed.xml site description.
-baseurl: "http://www.jianshu.com/u/f8b015eee27a" # the subpath of your site, e.g. /blog
+baseurl: "" # the subpath of your site, e.g. /blog
 url: "http://yourdomain.com" # the base hostname & protocol for your site
 twitter_username: 
 github_username:  coderYu
