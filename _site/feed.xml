@@ -5,22 +5,18 @@
     <description>这里的文章排版比较丑，有时间了在慢慢整理，简书上的排版会好很多~~欢迎指出文章中的错误或者不足之处.</description>
     <link>http://yourdomain.com/</link>
     <atom:link href="http://yourdomain.com/feed.xml" rel="self" type="application/rss+xml"/>
-    <pubDate>Tue, 14 Mar 2017 00:01:04 +0800</pubDate>
-    <lastBuildDate>Tue, 14 Mar 2017 00:01:04 +0800</lastBuildDate>
+    <pubDate>Tue, 14 Mar 2017 00:14:22 +0800</pubDate>
+    <lastBuildDate>Tue, 14 Mar 2017 00:14:22 +0800</lastBuildDate>
     <generator>Jekyll v3.1.6</generator>
     
       <item>
         <title>图解https的一些小动作</title>
         <description>&lt;p&gt;看了大半天，总算将https的整个握手过程都看的差不多了，之前网上看过很多资料，描述的都差不多，也让我对于整个过程有一个大致的概念了，但是我想知道的一些关键点都没讲出来，基本都是一笔带过，然后也就没有再继续找了，这次想起来，又重新找资料，找到两篇很详细的文章介绍了，其中第二篇还介绍了一些算法层次的内容，有兴趣研究的同学可以看看，我这边只是稍做简化并将它图形化了，让读者有一个更直观的感受。&lt;/p&gt;
 
-&lt;p&gt;参考文章：&lt;/p&gt;
-
-&lt;p&gt;&lt;a href=&quot;http://www.jianshu.com/p/a766bbf31417&quot;&gt;http://www.jianshu.com/p/a766bbf31417&lt;/a&gt;&lt;/p&gt;
-
-&lt;p&gt;&lt;a href=&quot;http://blog.csdn.net/zgwangbo/article/details/50889623&quot;&gt;http://blog.csdn.net/zgwangbo/article/details/50889623&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;参考文章：&lt;a href=&quot;http://www.jianshu.com/p/a766bbf31417&quot;&gt;http://www.jianshu.com/p/a766bbf31417&lt;/a&gt;,http://blog.csdn.net/zgwangbo/article/details/50889623&lt;/p&gt;
 
 &lt;p&gt;废话不多说，直接po图：
-&lt;img src=&quot;https.png&quot; alt=&quot;image&quot; /&gt;&lt;/p&gt;
+&lt;img src=&quot;http://upload-images.jianshu.io/upload_images/2000804-6090d82a908e2d44.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240&quot; alt=&quot;https.png&quot; /&gt;&lt;/p&gt;
 
 &lt;p&gt;对于之前了解过https过程的小伙伴，仔细看这个图应该会解开一些迷惑吧，仔细看！包括那些字母和脚标！但是！我还是稍微解释下吧，毕竟还是要凑点字数的……&lt;/p&gt;
 
@@ -28,13 +24,13 @@
 
 &lt;ol&gt;
   &lt;li&gt;ClientHello。 首先https请求是基于http的，也就是基于tcp的，所以先得建立tcp三次握手，这个就不说了，然后tcp握手后是SSL层的握手，也就是图中的ClientHello消息，client发送本地最新的TLS版本、算法组合的一个集合和其他很多辅助的信息，并且生成一个随机数A。具体的内容可以看下图（&lt;code class=&quot;highlighter-rouge&quot;&gt;ClientHello.png&lt;/code&gt;）：
-&lt;img src=&quot;ClientHello.png&quot; alt=&quot;image&quot; /&gt;
+&lt;img src=&quot;http://upload-images.jianshu.io/upload_images/2000804-900ab967d4c437d5.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240&quot; alt=&quot;ClientHello.png&quot; /&gt;
 可以看到随机数（&lt;code class=&quot;highlighter-rouge&quot;&gt;Random&lt;/code&gt;）是一个GMT UNIX时间加上一串随机字节，算法组合（&lt;code class=&quot;highlighter-rouge&quot;&gt;Cipher Suite&lt;/code&gt;）有26种。还有ClientHello并不是我随便叫叫的，真的叫ClientHello😢……&lt;/li&gt;
   &lt;li&gt;ServerHello。Server收到这些信息后比对自己的TLS版本，选择其中低的一个作为返回，并且从算法组合的集合中选出一种合适的组合，然后同样也生成一个随机数B，一起打包到ServerHello中传回给Client。内容如图（&lt;code class=&quot;highlighter-rouge&quot;&gt;ServerHello.png&lt;/code&gt;）：
-&lt;img src=&quot;ServerHello.png&quot; alt=&quot;ServerHello.png&quot; /&gt;
+&lt;img src=&quot;http://upload-images.jianshu.io/upload_images/2000804-84e576eff565ee07.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240&quot; alt=&quot;ServerHello.png&quot; /&gt;
 同样ServerHello也不是随便叫的，可以看到随机数格式和ClientHello一样，并且这里选出了一种CipherSuite算法组合。&lt;/li&gt;
   &lt;li&gt;Certificatie,ServerHelloDone。服务端在选出沟通策略之后将自己的证书信息告诉Client端（&lt;code class=&quot;highlighter-rouge&quot;&gt;Certificate&lt;/code&gt;），通知Client关于秘钥更新的信息（&lt;code class=&quot;highlighter-rouge&quot;&gt;ServerkeyExchange&lt;/code&gt;），接下去就看你的了，并且表示该发的都发给你了，我的Hello结束了（&lt;code class=&quot;highlighter-rouge&quot;&gt;ServerHelloDone&lt;/code&gt;）。
-&lt;img src=&quot;Certificate-ServerHelloDone.png&quot; alt=&quot;Certificate-ServerHelloDone.png&quot; /&gt;&lt;/li&gt;
+&lt;img src=&quot;http://upload-images.jianshu.io/upload_images/2000804-d472cf46f4216b0b.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240&quot; alt=&quot;Certificate-ServerHelloDone.png&quot; /&gt;&lt;/li&gt;
   &lt;li&gt;
     &lt;p&gt;Client收到2，3步的信息后先验证证书是不是合法的，包括它的颁发机构，域名匹配，有限期限等，这个具体的过程就不探究了，只要知道这些步骤就行了。&lt;/p&gt;
   &lt;/li&gt;
@@ -76,7 +72,7 @@
 &lt;/ol&gt;
 
 &lt;p&gt;总结：其实最终我们发现整个握手过程中并没有直接传输最终的加密秘钥D，而且交换了一些算法策略和生成D的一些参数，这样相对来说会更安全一点，直接传D的话这个过程就由Client端完成了，中间如果出什么差错Server会无感知无条件的信任Client传过来的D，就有可能出现问题了，所以采用只传策略和参数，并且由双方共同参与，这样安全性和正确性就会提高很多。贴一张整个过程的抓包图作为结尾吧~
-&lt;img src=&quot;握手消息过程.png&quot; alt=&quot;握手消息过程.png&quot; /&gt;&lt;/p&gt;
+&lt;img src=&quot;http://upload-images.jianshu.io/upload_images/2000804-dddb0bb893a8bbb2.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240&quot; alt=&quot;握手消息过程.png&quot; /&gt;&lt;/p&gt;
 </description>
         <pubDate>Mon, 13 Mar 2017 23:10:00 +0800</pubDate>
         <link>http://yourdomain.com/blog/2017/03/13/https.html</link>
@@ -588,7 +584,7 @@
 &lt;p&gt;很简单，直接调用&lt;strong&gt;sThreadLocal.get()&lt;/strong&gt;方法，很眼熟是吧，我们刚刚调用过它的&lt;strong&gt;set()&lt;/strong&gt;方法，这个时候还在刚才的线程中呢，所以这里取出来的就是我们刚刚放进去的&lt;strong&gt;new Looper()&lt;/strong&gt;，可以稍微看一下这个过程中有个参数就&lt;strong&gt;quitAllowed&lt;/strong&gt;，最终被传到了&lt;strong&gt;MessageQueue&lt;/strong&gt;的构造器中，应该可以猜到它表示这个&lt;strong&gt;MessageQueue&lt;/strong&gt;是否可以被退出或者说这个线程是否能被结束掉，当然因为我们的线程是主线程，所以传&lt;strong&gt;false&lt;/strong&gt;。目前为止我们已经完成了&lt;strong&gt;prepareMainLooper()&lt;/strong&gt;方法，它所做的事其实很简单，就是将我们的线程作为key在&lt;strong&gt;sThreadLocal&lt;/strong&gt;中保存了一个不可退出的&lt;strong&gt;Looper&lt;/strong&gt;对象，同时赋值给&lt;strong&gt;sMainLooper&lt;/strong&gt;，为什么还要单独定义一个&lt;strong&gt;sMainLooper&lt;/strong&gt;呢？首先&lt;strong&gt;sMainLooper&lt;/strong&gt;是一个静态属性，且有一个&lt;strong&gt;getMainLooper()&lt;/strong&gt;静态方法直接返回&lt;strong&gt;sMainLooper&lt;/strong&gt;,所以我猜测是因为主线程的&lt;strong&gt;Looper&lt;/strong&gt;对象获取比较频繁，所以单独作为一个属性直接读取，省的每次从&lt;strong&gt;sThreadLocal&lt;/strong&gt;中去取，以此减小开销。&lt;/p&gt;
 
 &lt;p&gt;下面放一张图作为prepareMainLooper的总结吧，对着图看应该清晰很多：
-&lt;img src=&quot;prepareMainLooper.001.jpeg&quot; alt=&quot;image&quot; /&gt;&lt;/p&gt;
+&lt;img src=&quot;http://upload-images.jianshu.io/upload_images/2000804-748f0d5ebae0f60d.jpeg?imageMogr2/auto-orient/strip%7CimageView2/2/&quot; alt=&quot;image&quot; /&gt;&lt;/p&gt;
 
 &lt;p&gt;回头继续看&lt;strong&gt;main()&lt;/strong&gt;方法，接下去new了一个ActivityThread实例&lt;strong&gt;thread&lt;/strong&gt;，并且调用了&lt;strong&gt;attach()&lt;/strong&gt;方法，然后将&lt;strong&gt;thread.getHandler()&lt;/strong&gt;返回给&lt;strong&gt;sMainThreadHandler&lt;/strong&gt;，这几行代码主要是初始化了我们的应用进程和Android系统的通信基础，也就是Binder组件，使得我们的应用进程和Android系统能够通信，这里我们只要知道个大概，就是Android系统会发送消息给我们的应用的&lt;strong&gt;ActivityThread&lt;/strong&gt;(好吧，其实是它的一个内部类&lt;strong&gt;ApplicationThread&lt;/strong&gt;)，然后由&lt;strong&gt;ActivityThread&lt;/strong&gt;包装成&lt;strong&gt;Message&lt;/strong&gt;放入&lt;strong&gt;sMainLooper&lt;/strong&gt;的&lt;strong&gt;MessageQueue&lt;/strong&gt;中等待执行。如何执行，请往下看……&lt;/p&gt;
 
@@ -626,7 +622,7 @@
 &lt;p&gt;可以看到以上代码逻辑也十分简单，获取当前线程的&lt;strong&gt;Looper&lt;/strong&gt;对象，进而获取&lt;strong&gt;Looper&lt;/strong&gt;对象中的&lt;strong&gt;MessageQueue&lt;/strong&gt;保存为&lt;strong&gt;queue&lt;/strong&gt;，然后进入死循环，每次都从&lt;strong&gt;queue&lt;/strong&gt;中取下一个&lt;strong&gt;Message&lt;/strong&gt;，得到&lt;strong&gt;Message&lt;/strong&gt;后直接调用&lt;strong&gt;Message&lt;/strong&gt;对象中保存的目标&lt;strong&gt;handler&lt;/strong&gt;的&lt;strong&gt;dispatchMessage（）&lt;/strong&gt;方法，然后回收&lt;strong&gt;Message&lt;/strong&gt;进入下一次循环。至此，我们的主线程才成为了真正意义上的主线程。上面说到Android系统会给我们应用发消息，然后消息被包装成&lt;strong&gt;Message&lt;/strong&gt;保存在&lt;strong&gt;MessageQueue&lt;/strong&gt;中，而在&lt;strong&gt;loop()&lt;/strong&gt;方法中我们又去取下一个&lt;strong&gt;Message&lt;/strong&gt;，是不是发现了什么？不错，我们应用中的各种系统方法的调用其实都是都将Android系统发送的消息包装成&lt;strong&gt;Message&lt;/strong&gt;保存到我们的应用主线程绑定的&lt;strong&gt;sMainLooper&lt;/strong&gt;中的&lt;strong&gt;MessageQueue&lt;/strong&gt;中，然后由这个死循环从&lt;strong&gt;MessageQueue&lt;/strong&gt;中取依次出&lt;strong&gt;Message&lt;/strong&gt;消息进而执行对应的方法，这样一个完整的消息传递过程就打通了！&lt;/p&gt;
 
 &lt;p&gt;老样子，看图：
-&lt;img src=&quot;loop.001.jpeg&quot; alt=&quot;image&quot; /&gt;&lt;/p&gt;
+&lt;img src=&quot;http://upload-images.jianshu.io/upload_images/2000804-3c4cdeda04e3e242.jpeg?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240&quot; alt=&quot;image&quot; /&gt;&lt;/p&gt;
 
 &lt;p&gt;我个人认为以上内容已经是&lt;strong&gt;Handler&lt;/strong&gt;和&lt;strong&gt;Message&lt;/strong&gt;完成多线程切换和消息传递的核心内容了，主要也就是&lt;strong&gt;Looper&lt;/strong&gt;类的用处和用法，看懂了这些内容再看整个流程会很轻松，所以如果还没理解的话建议再看几遍，或者直接去看看Looper的源码更好。&lt;/p&gt;
 
@@ -1199,7 +1195,7 @@ private static File[] splitLibraryPath(String path) {
  这样总算是创建了一个DexClassLoader。
  
 ##### 我们回顾一下:从new DexClassLoader(dexPath,optimizedDirectory,libraryPath,parentLoader)开始,调用父类BaseDexClassLoader构造器，用originalPath 保存了 dexPath，pathList保存了一个由dexPath、optimizedDirectory、libraryPath、loader四个参数构建的DexPathList，DexPathList中的definingContext 保存了parentLoader，optimizedDirectory和libraryPath会被分割成数组，其中nativeLibraryDirectories保存了libraryPath被分割后的数组，并且加上了系统so库的目录，dexElements保存了由dexPath被分割后的对应的file而创建的Elememt，它只是一个简单实体类，由一个File，一个ZipFile，一个DexFile组成，ZipFile是由jar、zip、apk形式的file包装成而来，DexFile使用native方法openDexFile打开了具体的file并输出到优化路径。
-![image](classloader 关系图.jpg)
+![image](http://upload-images.jianshu.io/upload_images/2000804-223630b50337033d.jpg?imageMogr2/auto-orient/strip%7CimageView2/2/)
 
 ---
 DexClassLoader的创建过程我们已经看完了，看看它是如何去找到我们需要的类的吧！

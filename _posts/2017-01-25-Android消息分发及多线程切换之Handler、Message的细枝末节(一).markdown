@@ -92,7 +92,7 @@ categories: Blog
 很简单，直接调用**sThreadLocal.get()**方法，很眼熟是吧，我们刚刚调用过它的**set()**方法，这个时候还在刚才的线程中呢，所以这里取出来的就是我们刚刚放进去的**new Looper()**，可以稍微看一下这个过程中有个参数就**quitAllowed**，最终被传到了**MessageQueue**的构造器中，应该可以猜到它表示这个**MessageQueue**是否可以被退出或者说这个线程是否能被结束掉，当然因为我们的线程是主线程，所以传**false**。目前为止我们已经完成了**prepareMainLooper()**方法，它所做的事其实很简单，就是将我们的线程作为key在**sThreadLocal**中保存了一个不可退出的**Looper**对象，同时赋值给**sMainLooper**，为什么还要单独定义一个**sMainLooper**呢？首先**sMainLooper**是一个静态属性，且有一个**getMainLooper()**静态方法直接返回**sMainLooper**,所以我猜测是因为主线程的**Looper**对象获取比较频繁，所以单独作为一个属性直接读取，省的每次从**sThreadLocal**中去取，以此减小开销。
 
 下面放一张图作为prepareMainLooper的总结吧，对着图看应该清晰很多：
-![image](prepareMainLooper.001.jpeg)
+![image](http://upload-images.jianshu.io/upload_images/2000804-748f0d5ebae0f60d.jpeg?imageMogr2/auto-orient/strip%7CimageView2/2/)
 
 回头继续看**main()**方法，接下去new了一个ActivityThread实例**thread**，并且调用了**attach()**方法，然后将**thread.getHandler()**返回给**sMainThreadHandler**，这几行代码主要是初始化了我们的应用进程和Android系统的通信基础，也就是Binder组件，使得我们的应用进程和Android系统能够通信，这里我们只要知道个大概，就是Android系统会发送消息给我们的应用的**ActivityThread**(好吧，其实是它的一个内部类**ApplicationThread**)，然后由**ActivityThread**包装成**Message**放入**sMainLooper**的**MessageQueue**中等待执行。如何执行，请往下看......
 
@@ -130,7 +130,7 @@ categories: Blog
 可以看到以上代码逻辑也十分简单，获取当前线程的**Looper**对象，进而获取**Looper**对象中的**MessageQueue**保存为**queue**，然后进入死循环，每次都从**queue**中取下一个**Message**，得到**Message**后直接调用**Message**对象中保存的目标**handler**的**dispatchMessage（）**方法，然后回收**Message**进入下一次循环。至此，我们的主线程才成为了真正意义上的主线程。上面说到Android系统会给我们应用发消息，然后消息被包装成**Message**保存在**MessageQueue**中，而在**loop()**方法中我们又去取下一个**Message**，是不是发现了什么？不错，我们应用中的各种系统方法的调用其实都是都将Android系统发送的消息包装成**Message**保存到我们的应用主线程绑定的**sMainLooper**中的**MessageQueue**中，然后由这个死循环从**MessageQueue**中取依次出**Message**消息进而执行对应的方法，这样一个完整的消息传递过程就打通了！
 
 老样子，看图：
-![image](loop.001.jpeg)
+![image](http://upload-images.jianshu.io/upload_images/2000804-3c4cdeda04e3e242.jpeg?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 
 我个人认为以上内容已经是**Handler**和**Message**完成多线程切换和消息传递的核心内容了，主要也就是**Looper**类的用处和用法，看懂了这些内容再看整个流程会很轻松，所以如果还没理解的话建议再看几遍，或者直接去看看Looper的源码更好。
 

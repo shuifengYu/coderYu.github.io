@@ -512,7 +512,7 @@ private static File[] splitLibraryPath(String path) {
  这样总算是创建了一个DexClassLoader。
  
 ##### 我们回顾一下:从new DexClassLoader(dexPath,optimizedDirectory,libraryPath,parentLoader)开始,调用父类BaseDexClassLoader构造器，用originalPath 保存了 dexPath，pathList保存了一个由dexPath、optimizedDirectory、libraryPath、loader四个参数构建的DexPathList，DexPathList中的definingContext 保存了parentLoader，optimizedDirectory和libraryPath会被分割成数组，其中nativeLibraryDirectories保存了libraryPath被分割后的数组，并且加上了系统so库的目录，dexElements保存了由dexPath被分割后的对应的file而创建的Elememt，它只是一个简单实体类，由一个File，一个ZipFile，一个DexFile组成，ZipFile是由jar、zip、apk形式的file包装成而来，DexFile使用native方法openDexFile打开了具体的file并输出到优化路径。
-![image](classloader 关系图.jpg)
+![image](http://upload-images.jianshu.io/upload_images/2000804-223630b50337033d.jpg?imageMogr2/auto-orient/strip%7CimageView2/2/)
 
 ---
 DexClassLoader的创建过程我们已经看完了，看看它是如何去找到我们需要的类的吧！

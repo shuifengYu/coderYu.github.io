@@ -163,7 +163,7 @@
 <p>很简单，直接调用<strong>sThreadLocal.get()</strong>方法，很眼熟是吧，我们刚刚调用过它的<strong>set()</strong>方法，这个时候还在刚才的线程中呢，所以这里取出来的就是我们刚刚放进去的<strong>new Looper()</strong>，可以稍微看一下这个过程中有个参数就<strong>quitAllowed</strong>，最终被传到了<strong>MessageQueue</strong>的构造器中，应该可以猜到它表示这个<strong>MessageQueue</strong>是否可以被退出或者说这个线程是否能被结束掉，当然因为我们的线程是主线程，所以传<strong>false</strong>。目前为止我们已经完成了<strong>prepareMainLooper()</strong>方法，它所做的事其实很简单，就是将我们的线程作为key在<strong>sThreadLocal</strong>中保存了一个不可退出的<strong>Looper</strong>对象，同时赋值给<strong>sMainLooper</strong>，为什么还要单独定义一个<strong>sMainLooper</strong>呢？首先<strong>sMainLooper</strong>是一个静态属性，且有一个<strong>getMainLooper()</strong>静态方法直接返回<strong>sMainLooper</strong>,所以我猜测是因为主线程的<strong>Looper</strong>对象获取比较频繁，所以单独作为一个属性直接读取，省的每次从<strong>sThreadLocal</strong>中去取，以此减小开销。</p>
 
 <p>下面放一张图作为prepareMainLooper的总结吧，对着图看应该清晰很多：
-<img src="prepareMainLooper.001.jpeg" alt="image" /></p>
+<img src="http://upload-images.jianshu.io/upload_images/2000804-748f0d5ebae0f60d.jpeg?imageMogr2/auto-orient/strip%7CimageView2/2/" alt="image" /></p>
 
 <p>回头继续看<strong>main()</strong>方法，接下去new了一个ActivityThread实例<strong>thread</strong>，并且调用了<strong>attach()</strong>方法，然后将<strong>thread.getHandler()</strong>返回给<strong>sMainThreadHandler</strong>，这几行代码主要是初始化了我们的应用进程和Android系统的通信基础，也就是Binder组件，使得我们的应用进程和Android系统能够通信，这里我们只要知道个大概，就是Android系统会发送消息给我们的应用的<strong>ActivityThread</strong>(好吧，其实是它的一个内部类<strong>ApplicationThread</strong>)，然后由<strong>ActivityThread</strong>包装成<strong>Message</strong>放入<strong>sMainLooper</strong>的<strong>MessageQueue</strong>中等待执行。如何执行，请往下看……</p>
 
@@ -201,7 +201,7 @@
 <p>可以看到以上代码逻辑也十分简单，获取当前线程的<strong>Looper</strong>对象，进而获取<strong>Looper</strong>对象中的<strong>MessageQueue</strong>保存为<strong>queue</strong>，然后进入死循环，每次都从<strong>queue</strong>中取下一个<strong>Message</strong>，得到<strong>Message</strong>后直接调用<strong>Message</strong>对象中保存的目标<strong>handler</strong>的<strong>dispatchMessage（）</strong>方法，然后回收<strong>Message</strong>进入下一次循环。至此，我们的主线程才成为了真正意义上的主线程。上面说到Android系统会给我们应用发消息，然后消息被包装成<strong>Message</strong>保存在<strong>MessageQueue</strong>中，而在<strong>loop()</strong>方法中我们又去取下一个<strong>Message</strong>，是不是发现了什么？不错，我们应用中的各种系统方法的调用其实都是都将Android系统发送的消息包装成<strong>Message</strong>保存到我们的应用主线程绑定的<strong>sMainLooper</strong>中的<strong>MessageQueue</strong>中，然后由这个死循环从<strong>MessageQueue</strong>中取依次出<strong>Message</strong>消息进而执行对应的方法，这样一个完整的消息传递过程就打通了！</p>
 
 <p>老样子，看图：
-<img src="loop.001.jpeg" alt="image" /></p>
+<img src="http://upload-images.jianshu.io/upload_images/2000804-3c4cdeda04e3e242.jpeg?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240" alt="image" /></p>
 
 <p>我个人认为以上内容已经是<strong>Handler</strong>和<strong>Message</strong>完成多线程切换和消息传递的核心内容了，主要也就是<strong>Looper</strong>类的用处和用法，看懂了这些内容再看整个流程会很轻松，所以如果还没理解的话建议再看几遍，或者直接去看看Looper的源码更好。</p>
 
