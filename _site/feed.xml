@@ -5,8 +5,8 @@
     <description>这里的文章排版比较丑，有时间了在慢慢整理，简书上的排版会好很多~~欢迎指出文章中的错误或者不足之处.</description>
     <link>http://yourdomain.com/</link>
     <atom:link href="http://yourdomain.com/feed.xml" rel="self" type="application/rss+xml"/>
-    <pubDate>Mon, 13 Mar 2017 23:39:50 +0800</pubDate>
-    <lastBuildDate>Mon, 13 Mar 2017 23:39:50 +0800</lastBuildDate>
+    <pubDate>Tue, 14 Mar 2017 00:01:04 +0800</pubDate>
+    <lastBuildDate>Tue, 14 Mar 2017 00:01:04 +0800</lastBuildDate>
     <generator>Jekyll v3.1.6</generator>
     
       <item>
@@ -20,7 +20,7 @@
 &lt;p&gt;&lt;a href=&quot;http://blog.csdn.net/zgwangbo/article/details/50889623&quot;&gt;http://blog.csdn.net/zgwangbo/article/details/50889623&lt;/a&gt;&lt;/p&gt;
 
 &lt;p&gt;废话不多说，直接po图：
-&lt;img src=&quot;https.png&quot; alt=&quot;https.png&quot; /&gt;&lt;/p&gt;
+&lt;img src=&quot;https.png&quot; alt=&quot;image&quot; /&gt;&lt;/p&gt;
 
 &lt;p&gt;对于之前了解过https过程的小伙伴，仔细看这个图应该会解开一些迷惑吧，仔细看！包括那些字母和脚标！但是！我还是稍微解释下吧，毕竟还是要凑点字数的……&lt;/p&gt;
 
@@ -28,7 +28,7 @@
 
 &lt;ol&gt;
   &lt;li&gt;ClientHello。 首先https请求是基于http的，也就是基于tcp的，所以先得建立tcp三次握手，这个就不说了，然后tcp握手后是SSL层的握手，也就是图中的ClientHello消息，client发送本地最新的TLS版本、算法组合的一个集合和其他很多辅助的信息，并且生成一个随机数A。具体的内容可以看下图（&lt;code class=&quot;highlighter-rouge&quot;&gt;ClientHello.png&lt;/code&gt;）：
-&lt;img src=&quot;ClientHello.png&quot; alt=&quot;ClientHello.png&quot; /&gt;
+&lt;img src=&quot;ClientHello.png&quot; alt=&quot;image&quot; /&gt;
 可以看到随机数（&lt;code class=&quot;highlighter-rouge&quot;&gt;Random&lt;/code&gt;）是一个GMT UNIX时间加上一串随机字节，算法组合（&lt;code class=&quot;highlighter-rouge&quot;&gt;Cipher Suite&lt;/code&gt;）有26种。还有ClientHello并不是我随便叫叫的，真的叫ClientHello😢……&lt;/li&gt;
   &lt;li&gt;ServerHello。Server收到这些信息后比对自己的TLS版本，选择其中低的一个作为返回，并且从算法组合的集合中选出一种合适的组合，然后同样也生成一个随机数B，一起打包到ServerHello中传回给Client。内容如图（&lt;code class=&quot;highlighter-rouge&quot;&gt;ServerHello.png&lt;/code&gt;）：
 &lt;img src=&quot;ServerHello.png&quot; alt=&quot;ServerHello.png&quot; /&gt;
