@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>图解https的一些小动作</title>
+  <meta name="description" content="看了大半天，总算将https的整个握手过程都看的差不多了，之前网上看过很多资料，描述的都差不多，也让我对于整个过程有一个大致的概念了，但是我想知道的一些关键点都没讲出来，基本都是一笔带过，然后也就没有再继续找了，这次想起来，又重新找资料，找到两篇很详细的文章介绍了，其中第二篇还介绍了一些算法层次的内容，有兴趣研究...">
+
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="canonical" href="http://yourdomain.com/blog/2017/03/13/https.html">
+  <link rel="alternate" type="application/rss+xml" title="coder_yu's BLOG" href="http://yourdomain.com/feed.xml">
+</head>
+
+
+  <body>
+
+    <header class="site-header">
+
+  <div class="wrapper">
+
+    <a class="site-title" href="/">coder_yu's BLOG</a>
+
+    <!-- <nav class="site-nav">
+      <a href="#" class="menu-icon">
+        <svg viewBox="0 0 18 15">
+          <path fill="#424242" d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.031C17.335,0,18,0.665,18,1.484L18,1.484z"/>
+          <path fill="#424242" d="M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0c0-0.82,0.665-1.484,1.484-1.484 h15.031C17.335,6.031,18,6.696,18,7.516L18,7.516z"/>
+          <path fill="#424242" d="M18,13.516C18,14.335,17.335,15,16.516,15H1.484C0.665,15,0,14.335,0,13.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.031C17.335,12.031,18,12.696,18,13.516L18,13.516z"/>
+        </svg>
+      </a>
+
+      <div class="trigger">
+        
+          
+          <a class="page-link" href="/2016-06-06-welcome-to-jekyll.html">Welcome to Jekyll!</a>
+          
+        
+          
+          <a class="page-link" href="/about/">About</a>
+          
+        
+          
+        
+          
+        
+          
+        
+      </div>
+    </nav> -->
+
+  </div>
+
+</header>
+
+
+    <div class="page-content">
+      <div class="wrapper">
+        <article class="post" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title" itemprop="name headline">图解https的一些小动作</h1>
+    <p class="post-meta"><time datetime="2017-03-13T23:10:00+08:00" itemprop="datePublished">Mar 13, 2017</time></p>
+  </header>
+
+  <div class="post-content" itemprop="articleBody">
+    <p>看了大半天，总算将https的整个握手过程都看的差不多了，之前网上看过很多资料，描述的都差不多，也让我对于整个过程有一个大致的概念了，但是我想知道的一些关键点都没讲出来，基本都是一笔带过，然后也就没有再继续找了，这次想起来，又重新找资料，找到两篇很详细的文章介绍了，其中第二篇还介绍了一些算法层次的内容，有兴趣研究的同学可以看看，我这边只是稍做简化并将它图形化了，让读者有一个更直观的感受。</p>
+
+<p>参考文章：</p>
+
+<p><a href="http://www.jianshu.com/p/a766bbf31417">http://www.jianshu.com/p/a766bbf31417</a></p>
+
+<p><a href="http://blog.csdn.net/zgwangbo/article/details/50889623">http://blog.csdn.net/zgwangbo/article/details/50889623</a></p>
+
+<p>废话不多说，直接po图：
+<img src="https.png" alt="https.png" /></p>
+
+<p>对于之前了解过https过程的小伙伴，仔细看这个图应该会解开一些迷惑吧，仔细看！包括那些字母和脚标！但是！我还是稍微解释下吧，毕竟还是要凑点字数的……</p>
+
+<p>概念的介绍啥的我就不说了，直接开始正文吧。</p>
+
+<ol>
+  <li>ClientHello。 首先https请求是基于http的，也就是基于tcp的，所以先得建立tcp三次握手，这个就不说了，然后tcp握手后是SSL层的握手，也就是图中的ClientHello消息，client发送本地最新的TLS版本、算法组合的一个集合和其他很多辅助的信息，并且生成一个随机数A。具体的内容可以看下图（<code class="highlighter-rouge">ClientHello.png</code>）：
+<img src="ClientHello.png" alt="ClientHello.png" />
+可以看到随机数（<code class="highlighter-rouge">Random</code>）是一个GMT UNIX时间加上一串随机字节，算法组合（<code class="highlighter-rouge">Cipher Suite</code>）有26种。还有ClientHello并不是我随便叫叫的，真的叫ClientHello😢……</li>
+  <li>ServerHello。Server收到这些信息后比对自己的TLS版本，选择其中低的一个作为返回，并且从算法组合的集合中选出一种合适的组合，然后同样也生成一个随机数B，一起打包到ServerHello中传回给Client。内容如图（<code class="highlighter-rouge">ServerHello.png</code>）：
+<img src="ServerHello.png" alt="ServerHello.png" />
+同样ServerHello也不是随便叫的，可以看到随机数格式和ClientHello一样，并且这里选出了一种CipherSuite算法组合。</li>
+  <li>Certificatie,ServerHelloDone。服务端在选出沟通策略之后将自己的证书信息告诉Client端（<code class="highlighter-rouge">Certificate</code>），通知Client关于秘钥更新的信息（<code class="highlighter-rouge">ServerkeyExchange</code>），接下去就看你的了，并且表示该发的都发给你了，我的Hello结束了（<code class="highlighter-rouge">ServerHelloDone</code>）。
+<img src="Certificate-ServerHelloDone.png" alt="Certificate-ServerHelloDone.png" /></li>
+  <li>
+    <p>Client收到2，3步的信息后先验证证书是不是合法的，包括它的颁发机构，域名匹配，有限期限等，这个具体的过程就不探究了，只要知道这些步骤就行了。</p>
+  </li>
+  <li>
+    <p>证书验证通过之后，生成随机数C1,然后用证书内容中的公钥通过服务器选择的非对称加密算法加密，得出为C2。</p>
+  </li>
+  <li>
+    <p>由之前的三个随机数A、B、C1通过一个伪随机函数再生成一个D，<strong>注意！这个是最终http真正使用的加密秘钥！！！</strong>。</p>
+  </li>
+  <li>
+    <p>由D再次通过伪随机函数生成一个秘钥组，包含6个秘钥，假设为P1,P2,P3,P4,P5,P6。</p>
+  </li>
+  <li>
+    <p>ClientKeyExchange。通知Server秘钥相关的信息，发送第5步中算出的C2给Server端。</p>
+  </li>
+  <li>Client端发送ClientKeyExchange之后，计算之前所有与Server端交互消息的hash值，假设为client_hash1，用步骤7中得到的其中一个P1进行加密，结果为E。</li>
+  <li>
+    <p>Server端收到C2后用私钥结合非对称算法解密C2，得到C1。</p>
+  </li>
+  <li>
+    <p>同样的Server端也根据A、B、C1由伪随机函数生成D(<strong>最终的加密秘钥！！！</strong>),再由D得出秘组钥（P1-P6），因为这里涉及到的算法都是一样的，所以得出的秘钥也是一样的。</p>
+  </li>
+  <li>
+    <p>Server端计算之前所有和Client端交互消息的hash值，假设为server_hash2，大家可能发现了，11、12跟Client端的6、7、9过程一致，只是少了9中的P1加密过程。</p>
+  </li>
+  <li>
+    <p>这个时候Client端会发送ChangeCipherSpec消息和EncryptedHandshakeMessage消息，通知Server端接下去使用选定的加密策略来通信了，并且将第9步中的E传给了Server。（这里几个步骤的顺序只是为了好理解一点而这样排列，实际两条线是独立在处理信息的，所以先后顺序不能保证）</p>
+  </li>
+  <li>
+    <p>这个时候Client会再次计算之前握手消息的hash值，得出结果client_hash2。</p>
+  </li>
+  <li>
+    <p>Server在收到EncryptedHandshakeMessage消息带过来的E之后，利用步骤11中的P1解密E，由于加密算法和P1都是相同的，所以这里还原出了client_hash1，然后与步骤12中的server_hash2比对，如果一样说明之前的几条协商秘钥的消息都被对方正确无误的理解了。</p>
+  </li>
+  <li>
+    <p>Server端再次对之前的消息做hash值，得出server_hash2，用P2进行加密结果为F，然后通过ChangeCipherSpec-EncryptedHandshakeMessage消息传给Client端。</p>
+  </li>
+  <li>Client收到Server的消息后根据P2解密F还原得出server_hash2，与client_hash2比对如果一致，则认为之前的交互过程都是正确无误且被对方理解的。至此，整个握手过程就结束了，之后的http数据报就会被之前确定的加密策略和加密秘钥D进行加密传输了。</li>
+</ol>
+
+<p>总结：其实最终我们发现整个握手过程中并没有直接传输最终的加密秘钥D，而且交换了一些算法策略和生成D的一些参数，这样相对来说会更安全一点，直接传D的话这个过程就由Client端完成了，中间如果出什么差错Server会无感知无条件的信任Client传过来的D，就有可能出现问题了，所以采用只传策略和参数，并且由双方共同参与，这样安全性和正确性就会提高很多。贴一张整个过程的抓包图作为结尾吧~
+<img src="握手消息过程.png" alt="握手消息过程.png" /></p>
+
+  </div>
+
+</article>
+
+      </div>
+    </div>
+
+    <footer class="site-footer">
+
+  <div class="wrapper">
+
+    <!--<h2 class="footer-heading">coder_yu's BLOG</h2>-->
+    <div style="color:#828282">
+     <p>这里的文章排版比较丑，有时间了在慢慢整理，简书上的排版会好很多~~欢迎指出文章中的错误或者不足之处.</p>
+    </div>
+    
+    <div class="footer-col-wrapper">
+
+
+      <div style="padding-left: 15px">
+        我的简书：<a href="http://www.jianshu.com/u/f8b015eee27a">http://www.jianshu.com/u/f8b015eee27a</a>
+      </div>
+
+      <div class="footer-col footer-col-1">
+        <ul class="contact-list">
+          <!-- <li>coder_yu's BLOG</li> -->
+          <li>email：<a href="mailto:coder_yu@126.com">coder_yu@126.com</a></li>
+        </ul>
+      </div>
+
+      <!-- <div class="footer-col footer-col-2">
+        <ul class="social-media-list">
+          
+          <li>
+            <a href="https://github.com/coderYu"><span class="icon icon--github"><svg viewBox="0 0 16 16"><path fill="#828282" d="M7.999,0.431c-4.285,0-7.76,3.474-7.76,7.761 c0,3.428,2.223,6.337,5.307,7.363c0.388,0.071,0.53-0.168,0.53-0.374c0-0.184-0.007-0.672-0.01-1.32 c-2.159,0.469-2.614-1.04-2.614-1.04c-0.353-0.896-0.862-1.135-0.862-1.135c-0.705-0.481,0.053-0.472,0.053-0.472 c0.779,0.055,1.189,0.8,1.189,0.8c0.692,1.186,1.816,0.843,2.258,0.645c0.071-0.502,0.271-0.843,0.493-1.037 C4.86,11.425,3.049,10.76,3.049,7.786c0-0.847,0.302-1.54,0.799-2.082C3.768,5.507,3.501,4.718,3.924,3.65 c0,0,0.652-0.209,2.134,0.796C6.677,4.273,7.34,4.187,8,4.184c0.659,0.003,1.323,0.089,1.943,0.261 c1.482-1.004,2.132-0.796,2.132-0.796c0.423,1.068,0.157,1.857,0.077,2.054c0.497,0.542,0.798,1.235,0.798,2.082 c0,2.981-1.814,3.637-3.543,3.829c0.279,0.24,0.527,0.713,0.527,1.437c0,1.037-0.01,1.874-0.01,2.129 c0,0.208,0.14,0.449,0.534,0.373c3.081-1.028,5.302-3.935,5.302-7.362C15.76,3.906,12.285,0.431,7.999,0.431z"/></svg>
+</span><span class="username">coderYu</span></a>
+
+          </li>
+          
+
+          
+
+          
+        </ul>
+      </div> -->
+
+      <!-- <div class="footer-col footer-col-3">
+        <p>这里的文章排版比较丑，有时间了在慢慢整理，简书上的排版会好很多~~欢迎指出文章中的错误或者不足之处.</p>
+      </div> -->
+    </div>
+
+  </div>
+
+</footer>
+
+
+  </body>
+
+</html>
